@@ -5,6 +5,7 @@ use ash::vk;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct Memory: u32 {
         const DEVICE_LOCAL = 0x00000001;
         const HOST_ACCESS = 0x00000002;

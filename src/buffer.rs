@@ -5,6 +5,7 @@ use ash::vk;
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Clone, Copy,)]
     pub struct BufferUsage: u32 {
         const TRANSFER_SRC = 0x00000001;
         const TRANSFER_DST = 0x00000002;
