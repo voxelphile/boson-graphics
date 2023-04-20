@@ -724,7 +724,7 @@ impl From<PolygonMode> for vk::PolygonMode {
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Copy, Clone)]
     pub struct FaceCull : u32 {
         const FRONT = 0x00000002;
         const BACK = 0x00000004;
