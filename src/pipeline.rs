@@ -728,7 +728,7 @@ bitflags! {
     pub struct FaceCull : u32 {
         const FRONT = 0x00000002;
         const BACK = 0x00000004;
-        const FRONT_AND_BACK = Self::FRONT.bits | Self::BACK.bits;
+        const FRONT_AND_BACK = Self::FRONT.bits() | Self::BACK.bits();
     }
 }
 
@@ -755,10 +755,10 @@ bitflags! {
         const G = 0x00000004;
         const B = 0x00000008;
         const A = 0x00000020;
-        const ALL = Self::R.bits
-                                | Self::G.bits
-                                | Self::B.bits
-                                | Self::A.bits;
+        const ALL = Self::R.bits()
+                                | Self::G.bits()
+                                | Self::B.bits()
+                                | Self::A.bits();
     }
 }
 impl From<ColorComponent> for vk::ColorComponentFlags {
@@ -1048,6 +1048,7 @@ impl Default for ComputePipelineInfo<'_> {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Eq, PartialEq)]
     pub struct PipelineStage: u32 {
         const TOP_OF_PIPE = 0x00000001;
         const VERTEX_SHADER = 0x00000002;
