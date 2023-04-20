@@ -1048,7 +1048,7 @@ impl Default for ComputePipelineInfo<'_> {
 }
 
 bitflags! {
-    #[derive(Clone, Copy, Eq, PartialEq)]
+    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
     pub struct PipelineStage: u32 {
         const TOP_OF_PIPE = 0x00000001;
         const VERTEX_SHADER = 0x00000002;
