@@ -749,6 +749,7 @@ impl From<FaceCull> for vk::CullModeFlags {
 }
 
 bitflags! {
+    #[derive(Clone, Copy)]
     pub struct ColorComponent : u32 {
         const R = 0x00000002;
         const G = 0x00000004;
