@@ -1,9 +1,10 @@
 [package]
 name = "boson"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "A vulkan abstraction layer."
 license = "MIT"
+repository = "https://github.com/voxelphile/boson"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

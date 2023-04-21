@@ -49,7 +49,7 @@ pub struct Executor<'a, T> {
 }
 
 impl<'a, T> Executor<'a, T> {
-    pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&T, &mut Commands) -> Result<()> + 'b>(
+    pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'b>(
         &mut self,
         task: Task<T, N, F>,
     ) {
@@ -149,9 +149,9 @@ impl<T> Executable<'_, T> {
     }
 }
 
-impl<T> ops::FnMut<(&T,)> for Executable<'_, T> {
+impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
    
-    extern "rust-call" fn call_mut(&mut self, args: (&T,)) {
+    extern "rust-call" fn call_mut(&mut self, args: (&mut T,)) {
         profiling::scope!("executable", "ev");
         let (home,) = args;
 
@@ -574,10 +574,10 @@ impl<T> ops::FnMut<(&T,)> for Executable<'_, T> {
     }
 }
 
-impl<T> ops::FnOnce<(&T,)> for Executable<'_, T> {
+impl<T> ops::FnOnce<(&mut T,)> for Executable<'_, T> {
     type Output = ();
 
-    extern "rust-call" fn call_once(mut self, args: (&T,)) {
+    extern "rust-call" fn call_once(mut self, args: (&mut T,)) {
         self.call_mut(args)
     }
 }
@@ -763,12 +763,12 @@ impl From<BufferAccess> for Access {
 }
 
 pub enum Resource<T> {
-    Buffer(Box<dyn ops::Fn(&T) -> Buffer>, BufferAccess),
-    Image(Box<dyn ops::Fn(&T) -> Image>, ImageAccess),
+    Buffer(Box<dyn ops::Fn(&mut T) -> Buffer>, BufferAccess),
+    Image(Box<dyn ops::Fn(&mut T) -> Image>, ImageAccess),
 }
 
 impl<T> Resource<T> {
-    pub(crate) fn resolve(&self, t: &T) -> Qualifier {
+    pub(crate) fn resolve(&self, t: &mut T) -> Qualifier {
         match self {
             Resource::Buffer(call, access) => Qualifier::Buffer((call)(t), *access),
             Resource::Image(call, access) => Qualifier::Image((call)(t), *access),
@@ -782,12 +782,12 @@ pub(crate) enum Qualifier {
     Image(Image, ImageAccess),
 }
 
-pub struct Task<T, const N: usize, F: ops::FnMut(&T, &mut Commands) -> Result<()>> {
+pub struct Task<T, const N: usize, F: ops::FnMut(&mut T, &mut Commands) -> Result<()>> {
     pub resources: [Resource<T>; N],
     pub task: F,
 }
 
 pub struct Node<'a, T> {
     pub resources: Vec<Resource<T>>,
-    pub task: Box<dyn ops::FnMut(&T, &mut Commands) -> Result<()> + 'a>,
+    pub task: Box<dyn ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'a>,
 }
