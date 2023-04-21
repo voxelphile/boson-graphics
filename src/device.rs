@@ -712,7 +712,7 @@ impl Device {
         todo!()
     }
 
-    pub fn create_executor<'a>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a>> {
+    pub fn create_executor<'a, T>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a, T>> {
         let ExecutorInfo {
             debug_name,
             swapchain,

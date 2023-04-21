@@ -41,17 +41,17 @@ impl Default for ExecutorInfo<'_> {
     }
 }
 
-pub struct Executor<'a> {
+pub struct Executor<'a, T> {
     pub(crate) device: Arc<DeviceInner>,
     pub(crate) swapchain: Swapchain,
-    pub(crate) nodes: Vec<Node<'a>>,
+    pub(crate) nodes: Vec<Node<'a, T>>,
     pub(crate) debug_name: String,
 }
 
-impl<'a> Executor<'a> {
-    pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&mut Commands) -> Result<()> + 'b>(
+impl<'a, T> Executor<'a, T> {
+    pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&T, &mut Commands) -> Result<()> + 'b>(
         &mut self,
-        task: Task<N, F>,
+        task: Task<T, N, F>,
     ) {
         let Task { task, resources } = task;
 
@@ -61,7 +61,7 @@ impl<'a> Executor<'a> {
         });
     }
 
-    pub fn complete(self) -> Result<Executable<'a>> {
+    pub fn complete(self) -> Result<Executable<'a, T>> {
         let Executor {
             device,
             nodes,
@@ -124,35 +124,37 @@ impl<'a> Executor<'a> {
     }
 }
 
-pub struct Executable<'a> {
-    inner: Arc<ExecutableInner<'a>>,
+pub struct Executable<'a, T> {
+    inner: Arc<ExecutableInner<'a, T>>,
 }
 
-pub struct ExecutableInner<'a> {
+pub struct ExecutableInner<'a, T> {
     pub(crate) device: Arc<DeviceInner>,
     pub(crate) swapchain: Swapchain,
     pub(crate) command_buffers: Vec<vk::CommandBuffer>,
     pub(crate) fences: Vec<vk::Fence>,
-    pub(crate) modify: Mutex<ExecutableModify<'a>>,
+    pub(crate) modify: Mutex<ExecutableModify<'a, T>>,
 }
 
-pub struct ExecutableModify<'a> {
+pub struct ExecutableModify<'a, T> {
     pub(crate) fps_instant: time::Instant,
     pub(crate) fps_counter: usize,
     pub(crate) fps: usize,
-    pub(crate) nodes: Vec<Node<'a>>,
+    pub(crate) nodes: Vec<Node<'a, T>>,
 }
 
-impl Executable<'_> {
+impl<T> Executable<'_, T> {
     pub fn fps(&self) -> usize {
         self.inner.modify.lock().unwrap().fps
     }
 }
 
-impl ops::FnMut<()> for Executable<'_> {
-    #[profiling::function]
-    extern "rust-call" fn call_mut(&mut self, args: ()) {
+impl<T> ops::FnMut<(&T,)> for Executable<'_, T> {
+   
+    extern "rust-call" fn call_mut(&mut self, args: (&T,)) {
         profiling::scope!("executable", "ev");
+        let (home,) = args;
+
         let ExecutableInner {
             device,
             command_buffers,
@@ -380,7 +382,7 @@ impl ops::FnMut<()> for Executable<'_> {
             let qualifiers = node
                 .resources
                 .iter()
-                .map(|resource| resource.resolve())
+                .map(|resource| resource.resolve(home))
                 .collect::<Vec<_>>();
 
             let mut naive_barriers = vec![];
@@ -458,7 +460,7 @@ impl ops::FnMut<()> for Executable<'_> {
                 commands.pipeline_barrier(barrier).unwrap();
             }
 
-            (node.task)(&mut commands).unwrap();
+            (node.task)(home, &mut commands).unwrap();
         }
 
         unsafe {
@@ -572,11 +574,11 @@ impl ops::FnMut<()> for Executable<'_> {
     }
 }
 
-impl ops::FnOnce<()> for Executable<'_> {
+impl<T> ops::FnOnce<(&T,)> for Executable<'_, T> {
     type Output = ();
 
-    extern "rust-call" fn call_once(mut self, args: ()) {
-        self.call_mut(())
+    extern "rust-call" fn call_once(mut self, args: (&T,)) {
+        self.call_mut(args)
     }
 }
 
@@ -760,16 +762,16 @@ impl From<BufferAccess> for Access {
     }
 }
 
-pub enum Resource {
-    Buffer(Box<dyn ops::Fn() -> Buffer>, BufferAccess),
-    Image(Box<dyn ops::Fn() -> Image>, ImageAccess),
+pub enum Resource<T> {
+    Buffer(Box<dyn ops::Fn(&T) -> Buffer>, BufferAccess),
+    Image(Box<dyn ops::Fn(&T) -> Image>, ImageAccess),
 }
 
-impl Resource {
-    pub(crate) fn resolve(&self) -> Qualifier {
+impl<T> Resource<T> {
+    pub(crate) fn resolve(&self, t: &T) -> Qualifier {
         match self {
-            Resource::Buffer(call, access) => Qualifier::Buffer((call)(), *access),
-            Resource::Image(call, access) => Qualifier::Image((call)(), *access),
+            Resource::Buffer(call, access) => Qualifier::Buffer((call)(t), *access),
+            Resource::Image(call, access) => Qualifier::Image((call)(t), *access),
         }
     }
 }
@@ -780,12 +782,12 @@ pub(crate) enum Qualifier {
     Image(Image, ImageAccess),
 }
 
-pub struct Task<const N: usize, F: ops::FnMut(&mut Commands) -> Result<()>> {
-    pub resources: [Resource; N],
+pub struct Task<T, const N: usize, F: ops::FnMut(&T, &mut Commands) -> Result<()>> {
+    pub resources: [Resource<T>; N],
     pub task: F,
 }
 
-pub struct Node<'a> {
-    pub resources: Vec<Resource>,
-    pub task: Box<dyn ops::FnMut(&mut Commands) -> Result<()> + 'a>,
+pub struct Node<'a, T> {
+    pub resources: Vec<Resource<T>>,
+    pub task: Box<dyn ops::FnMut(&T, &mut Commands) -> Result<()> + 'a>,
 }
