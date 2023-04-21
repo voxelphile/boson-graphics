@@ -714,7 +714,6 @@ impl Device {
 
     pub fn create_executor<'a>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a>> {
         let ExecutorInfo {
-            optimizer,
             debug_name,
             swapchain,
         } = info;
@@ -734,7 +733,6 @@ impl Device {
         Ok(Executor {
             device: self.inner.clone(),
             swapchain,
-            optimizer,
             nodes,
             debug_name,
         })

@@ -28,7 +28,6 @@ pub struct Submit {
 }
 
 pub struct ExecutorInfo<'a> {
-    pub optimizer: &'a dyn ops::Fn(&mut Executor<'a>),
     pub swapchain: Swapchain,
     pub debug_name: &'a str,
 }
@@ -36,7 +35,6 @@ pub struct ExecutorInfo<'a> {
 impl Default for ExecutorInfo<'_> {
     fn default() -> Self {
         Self {
-            optimizer: &non_optimizer,
             swapchain: u32::MAX.into(),
             debug_name: "Executor",
         }
@@ -46,7 +44,6 @@ impl Default for ExecutorInfo<'_> {
 pub struct Executor<'a> {
     pub(crate) device: Arc<DeviceInner>,
     pub(crate) swapchain: Swapchain,
-    pub(crate) optimizer: &'a dyn ops::Fn(&mut Executor<'a>),
     pub(crate) nodes: Vec<Node<'a>>,
     pub(crate) debug_name: String,
 }
@@ -54,16 +51,14 @@ pub struct Executor<'a> {
 impl<'a> Executor<'a> {
     pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&mut Commands) -> Result<()> + 'b>(
         &mut self,
-        task: Task<'b, N, F>,
+        task: Task<N, F>,
     ) {
         let Task { task, resources } = task;
 
         self.nodes.push(Node {
-            resources: resources.to_vec(),
+            resources: resources.into_iter().collect::<Vec<_>>(),
             task: box task,
         });
-
-        (self.optimizer)(self);
     }
 
     pub fn complete(self) -> Result<Executable<'a>> {
@@ -765,17 +760,16 @@ impl From<BufferAccess> for Access {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum Resource<'a> {
-    Buffer(&'a dyn ops::Fn() -> Buffer, BufferAccess),
-    Image(&'a dyn ops::Fn() -> Image, ImageAccess),
+pub enum Resource {
+    Buffer(Box<dyn ops::Fn() -> Buffer>, BufferAccess),
+    Image(Box<dyn ops::Fn() -> Image>, ImageAccess),
 }
 
-impl Resource<'_> {
-    pub(crate) fn resolve(self) -> Qualifier {
+impl Resource {
+    pub(crate) fn resolve(&self) -> Qualifier {
         match self {
-            Resource::Buffer(call, access) => Qualifier::Buffer((call)(), access),
-            Resource::Image(call, access) => Qualifier::Image((call)(), access),
+            Resource::Buffer(call, access) => Qualifier::Buffer((call)(), *access),
+            Resource::Image(call, access) => Qualifier::Image((call)(), *access),
         }
     }
 }
@@ -786,14 +780,12 @@ pub(crate) enum Qualifier {
     Image(Image, ImageAccess),
 }
 
-pub struct Task<'a, const N: usize, F: ops::FnMut(&mut Commands) -> Result<()>> {
-    pub resources: [Resource<'a>; N],
+pub struct Task<const N: usize, F: ops::FnMut(&mut Commands) -> Result<()>> {
+    pub resources: [Resource; N],
     pub task: F,
 }
 
 pub struct Node<'a> {
-    pub resources: Vec<Resource<'a>>,
+    pub resources: Vec<Resource>,
     pub task: Box<dyn ops::FnMut(&mut Commands) -> Result<()> + 'a>,
 }
-
-pub fn non_optimizer(graph: &mut Executor<'_>) {}

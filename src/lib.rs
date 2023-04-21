@@ -53,7 +53,7 @@ pub mod prelude {
     };
     pub(crate) use crate::task::Qualifier;
     pub use crate::task::{
-        non_optimizer, BufferAccess, Executable, Executor, ExecutorInfo, ImageAccess, Present,
+        BufferAccess, Executable, Executor, ExecutorInfo, ImageAccess, Present,
         Resource, Submit, Task,
     };
     pub use crate::{Error, Result};
