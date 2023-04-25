@@ -10,8 +10,7 @@ bitflags! {
         const TRANSFER_SRC = 0x00000001;
         const TRANSFER_DST = 0x00000002;
         const STORAGE = 0x00000004;
-        const INDEX = 0x00000008;
-        const VERTEX = 0x00000010;
+        const INDIRECT = 0x00000008;
     }
 }
 
@@ -31,12 +30,8 @@ impl From<BufferUsage> for vk::BufferUsageFlags {
             result |= vk::BufferUsageFlags::STORAGE_BUFFER;
         }
 
-        if usage.contains(BufferUsage::INDEX) {
-            result |= vk::BufferUsageFlags::INDEX_BUFFER;
-        }
-
-        if usage.contains(BufferUsage::VERTEX) {
-            result |= vk::BufferUsageFlags::VERTEX_BUFFER;
+        if usage.contains(BufferUsage::INDIRECT) {
+            result |= vk::BufferUsageFlags::INDIRECT_BUFFER;
         }
 
         result
