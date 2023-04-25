@@ -24,7 +24,7 @@ use std::result;
 
 pub mod prelude {
     pub(crate) use crate::buffer::InternalBuffer;
-    pub use crate::buffer::{Buffer, BufferInfo, BufferAddress};
+    pub use crate::buffer::{Buffer, BufferInfo, BufferAddress, BufferUsage};
     pub use crate::commands::{
         Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferRead, BufferWrite, Clear,
         Commands, Draw, DrawIndexed, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Render,
@@ -33,7 +33,7 @@ pub mod prelude {
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};
     pub(crate) use crate::device::DeviceResources;
-    pub use crate::device::{Device, DeviceInfo, DeviceSelector};
+    pub use crate::device::{Device, DeviceInfo, DeviceSelector, Features};
     pub use crate::format::Format;
     pub(crate) use crate::image::InternalImage;
     pub use crate::image::{Image, ImageExtent, ImageInfo, ImageLayout, ImageUsage};
