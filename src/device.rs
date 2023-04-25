@@ -708,8 +708,15 @@ impl From<vk::PhysicalDeviceLimits> for Limits {
 }
 
 impl Device {
-    pub fn acquire(&self) -> Image {
-        todo!()
+    pub fn address(&self, buffer: Buffer) -> Result<BufferAddress> {
+        let DeviceInner { logical_device, resources, .. } = &*self.inner;
+        
+        let buffer_device_address_info = vk::BufferDeviceAddressInfo {
+            buffer: resources.lock().unwrap().buffers.get(buffer).ok_or(Error::InvalidResource)?.buffer,
+            ..default()
+        };
+
+        Ok(BufferAddress(unsafe { logical_device.get_buffer_device_address(&buffer_device_address_info) }))
     }
 
     pub fn create_executor<'a, T>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a, T>> {

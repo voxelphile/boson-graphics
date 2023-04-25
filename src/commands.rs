@@ -197,6 +197,21 @@ pub struct Draw {
     pub vertex_count: usize,
 }
 
+pub struct DrawIndirect {
+    pub buffer: usize,
+    pub offset: usize,
+    pub draw_count: usize,
+    pub stride: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct DrawIndirectCommand {
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub first_vertex: u32,
+    pub first_instance: u32,
+}
+
 pub struct DrawIndexed {
     pub index_count: usize,
 }
@@ -789,6 +804,31 @@ impl Commands<'_> {
                 &[*descriptor_set],
                 &[],
             );
+        }
+
+        Ok(())
+    }
+
+    pub fn draw_indirect(&mut self, draw_indirect: DrawIndirect) -> Result<()> {
+        let Commands {
+            device,
+            command_buffer,
+            qualifiers,
+            ..
+        } = self;
+
+        let DeviceInner { logical_device, resources, .. } = &*device;
+
+        let DrawIndirect { buffer, offset, draw_count, stride } = draw_indirect;
+
+        let Qualifier::Buffer(buffer_handle, _) = qualifiers.get(buffer).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let buffer = resources.lock().unwrap().buffers.get(*buffer_handle).ok_or(Error::ResourceNotFound)?.buffer;
+
+        unsafe {
+            logical_device.cmd_draw_indirect(**command_buffer, buffer, offset as u64, draw_count as u32, stride as u32);
         }
 
         Ok(())

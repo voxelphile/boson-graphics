@@ -72,6 +72,7 @@ pub struct ShaderCompilerInfo {
 }
 
 pub struct ShaderCompilationOptions<'a> {
+    source_path: &'a path::Path,
     input_path: &'a path::Path,
     output_path: &'a path::Path,
     ty: ShaderType,
@@ -149,6 +150,8 @@ impl ShaderCompiler {
                     .arg(format!("-fshader-stage={}", options.ty))
                     .arg("--target-env=vulkan1.3")
                     .arg("-O")
+                    .arg("-I")
+                    .arg(&options.source_path)
                     .arg("-c")
                     .arg(&temporary_path)
                     .arg("-o")
@@ -245,10 +248,10 @@ pub struct PipelineCompilerInner {
 }
 
 impl PipelineCompiler {
-    pub fn create_graphics_pipeline<'a, const S: usize, const C: usize>(
+    pub fn create_graphics_pipeline<'a, 'b: 'a, const S: usize, const C: usize>(
         &'a self,
-        info: GraphicsPipelineInfo<'a, S, C>,
-    ) -> Result<Pipeline<'a, S, C>> {
+        info: GraphicsPipelineInfo<'b, S, C>,
+    ) -> Result<Pipeline<'b, S, C>> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
         let DeviceInner {
@@ -279,6 +282,7 @@ impl PipelineCompiler {
                     .inner
                     .compiler
                     .compile_to_spv(ShaderCompilationOptions {
+                        source_path: &self.inner.source_path.clone(),
                         input_path: &input_path,
                         output_path: &output_path,
                         ty: *ty,
@@ -519,9 +523,9 @@ impl PipelineCompiler {
         })
     }
 
-    pub fn create_compute_pipeline<'a>(
+    pub fn create_compute_pipeline<'a, 'b: 'a>(
         &'a self,
-        info: ComputePipelineInfo<'a>,
+        info: ComputePipelineInfo<'b>,
     ) -> Result<Pipeline<1, 0>> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
@@ -552,6 +556,7 @@ impl PipelineCompiler {
                 .inner
                 .compiler
                 .compile_to_spv(ShaderCompilationOptions {
+                    source_path: &self.inner.source_path.clone(),
                     input_path: &input_path,
                     output_path: &output_path,
                     ty,
@@ -653,9 +658,9 @@ impl PipelineCompiler {
         })
     }
 
-    pub fn refresh_graphics_pipeline<'a, const S: usize, const C: usize>(
+    pub fn refresh_graphics_pipeline<'a, 'b: 'a, const S: usize, const C: usize>(
         &'a self,
-        pipeline: &'a Pipeline<'a, S, C>,
+        pipeline: &'a Pipeline<'b, S, C>,
     ) -> Result<()> {
         let Spec::Graphics(info) = pipeline.inner.spec else {
             Err(Error::InvalidResource)?
@@ -672,7 +677,7 @@ impl PipelineCompiler {
         Ok(())
     }
 
-    pub fn refresh_compute_pipeline<'a>(&'a self, pipeline: &'a Pipeline<'a, 1, 0>) -> Result<()> {
+    pub fn refresh_compute_pipeline<'a, 'b: 'a>(&'a self, pipeline: &'a Pipeline<'b, 1, 0>) -> Result<()> {
         let Spec::Compute(info) = pipeline.inner.spec else {
             Err(Error::InvalidResource)?
         };

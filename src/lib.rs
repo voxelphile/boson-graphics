@@ -24,11 +24,11 @@ use std::result;
 
 pub mod prelude {
     pub(crate) use crate::buffer::InternalBuffer;
-    pub use crate::buffer::{Buffer, BufferInfo};
+    pub use crate::buffer::{Buffer, BufferInfo, BufferAddress};
     pub use crate::commands::{
         Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferRead, BufferWrite, Clear,
         Commands, Draw, DrawIndexed, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Render,
-        RenderArea,
+        RenderArea, DrawIndirect, DrawIndirectCommand,
     };
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};

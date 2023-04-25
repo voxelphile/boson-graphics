@@ -55,6 +55,11 @@ pub(crate) struct InternalBuffer {
 #[repr(transparent)]
 pub struct Buffer(pub(crate) u32);
 
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct BufferAddress(pub(crate) u64);
+
 impl From<Buffer> for u32 {
     fn from(handle: Buffer) -> Self {
         handle.0

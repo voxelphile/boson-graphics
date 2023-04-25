@@ -552,10 +552,10 @@ impl Context {
         }
         .map_err(|_| Error::CreateDescriptorSetLayout)?;
 
+        let set_layouts = [descriptor_set_layout];
+
         let descriptor_set_allocate_info = {
             let descriptor_set_count = 1;
-
-            let set_layouts = [descriptor_set_layout];
 
             let p_set_layouts = set_layouts.as_ptr();
 
