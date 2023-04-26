@@ -49,14 +49,14 @@ pub struct Executor<'a, T> {
 }
 
 impl<'a, T> Executor<'a, T> {
-    pub fn add<'b: 'a, const N: usize, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'b>(
+    pub fn add<'b: 'a, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'b>(
         &mut self,
-        task: Task<T, N, F>,
+        task: Task<T, F>,
     ) {
         let Task { task, resources } = task;
 
         self.nodes.push(Node {
-            resources: resources.into_iter().collect::<Vec<_>>(),
+            resources,
             task: box task,
         });
     }
@@ -263,7 +263,7 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
 
             for i in 0..resources.images.count() as usize {
                 if let Some(internal_image) = resources.images.get((i as u32).into()) {
-                    if internal_image.get_format() == Format::D32Sfloat {
+                    if internal_image.get_format().is_depth_or_stencil() {
                         descriptor_image_infos.push(vk::DescriptorImageInfo { ..default() });
                         continue;
                     }
@@ -414,7 +414,7 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
 
                         last_buffer_access.insert(*buffer, *dst);
                     }
-                    Qualifier::Image(image, dst) => {
+                    Qualifier::Image(image, dst, image_aspect) => {
                         let src = last_image_access.entry(*image).or_default();
 
                         u32::from(*image);
@@ -428,6 +428,7 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
                                 new_layout: (*dst).into(),
                                 src_access: (*src).into(),
                                 dst_access: (*dst).into(),
+                                image_aspect: (*image_aspect)
                             }],
                         });
 
@@ -603,6 +604,7 @@ pub enum ImageAccess {
     ColorAttachment,
     DepthAttachment,
     DepthAttachmentReadOnly,
+    DepthStencilAttachment,
     Present,
 }
 
@@ -612,7 +614,7 @@ impl From<ImageAccess> for PipelineStage {
             ImageAccess::None => PipelineStage::empty(),
             ImageAccess::Present => PipelineStage::ALL_COMMANDS,
             ImageAccess::TransferWrite | ImageAccess::TransferRead => PipelineStage::TRANSFER,
-            ImageAccess::DepthAttachmentReadOnly | ImageAccess::DepthAttachment => {
+            ImageAccess::DepthAttachmentReadOnly | ImageAccess::DepthAttachment | ImageAccess::DepthStencilAttachment => {
                 PipelineStage::EARLY_FRAGMENT_TESTS | PipelineStage::LATE_FRAGMENT_TESTS
             }
             ImageAccess::ShaderReadWrite
@@ -641,6 +643,7 @@ impl From<ImageAccess> for ImageLayout {
             ImageAccess::Present => ImageLayout::Present,
             ImageAccess::TransferWrite => ImageLayout::TransferDstOptimal,
             ImageAccess::TransferRead => ImageLayout::TransferSrcOptimal,
+            ImageAccess::DepthStencilAttachment => ImageLayout::DepthStencilAttachmentOptimal,
             ImageAccess::DepthAttachment => ImageLayout::DepthAttachmentOptimal,
             ImageAccess::DepthAttachmentReadOnly
             | ImageAccess::VertexShaderReadOnly
@@ -678,6 +681,7 @@ impl From<ImageAccess> for Access {
             | ImageAccess::ComputeShaderWriteOnly => Access::WRITE,
             ImageAccess::ColorAttachment
             | ImageAccess::DepthAttachment
+            | ImageAccess::DepthStencilAttachment
             | ImageAccess::ShaderReadWrite
             | ImageAccess::VertexShaderReadWrite
             | ImageAccess::FragmentShaderReadWrite
@@ -764,14 +768,14 @@ impl From<BufferAccess> for Access {
 
 pub enum Resource<T> {
     Buffer(Box<dyn ops::Fn(&mut T) -> Buffer>, BufferAccess),
-    Image(Box<dyn ops::Fn(&mut T) -> Image>, ImageAccess),
+    Image(Box<dyn ops::Fn(&mut T) -> Image>, ImageAccess, ImageAspect),
 }
 
 impl<T> Resource<T> {
     pub(crate) fn resolve(&self, t: &mut T) -> Qualifier {
         match self {
             Resource::Buffer(call, access) => Qualifier::Buffer((call)(t), *access),
-            Resource::Image(call, access) => Qualifier::Image((call)(t), *access),
+            Resource::Image(call, access, aspect) => Qualifier::Image((call)(t), *access, *aspect),
         }
     }
 }
@@ -779,11 +783,11 @@ impl<T> Resource<T> {
 #[derive(Clone, Copy)]
 pub(crate) enum Qualifier {
     Buffer(Buffer, BufferAccess),
-    Image(Image, ImageAccess),
+    Image(Image, ImageAccess, ImageAspect),
 }
 
-pub struct Task<T, const N: usize, F: ops::FnMut(&mut T, &mut Commands) -> Result<()>> {
-    pub resources: [Resource<T>; N],
+pub struct Task<T, F: ops::FnMut(&mut T, &mut Commands) -> Result<()>> {
+    pub resources: Vec<Resource<T>>,
     pub task: F,
 }
 

@@ -94,6 +94,7 @@ pub enum ImageLayout {
     TransferDstOptimal,
     ColorAttachmentOptimal,
     DepthAttachmentOptimal,
+    DepthStencilAttachmentOptimal,
     Present,
 }
 
@@ -107,6 +108,7 @@ impl From<ImageLayout> for vk::ImageLayout {
             ImageLayout::General => Self::GENERAL,
             ImageLayout::ColorAttachmentOptimal => Self::COLOR_ATTACHMENT_OPTIMAL,
             ImageLayout::DepthAttachmentOptimal => Self::DEPTH_ATTACHMENT_OPTIMAL,
+            ImageLayout::DepthStencilAttachmentOptimal => Self::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             ImageLayout::Present => Self::PRESENT_SRC_KHR,
         }
     }
@@ -118,9 +120,47 @@ bitflags! {
         const TRANSFER_SRC = 0x00000001;
         const TRANSFER_DST = 0x00000002;
         const COLOR = 0x00000010;
-        const DEPTH = 0x00000020;
+        const DEPTH_STENCIL = 0x00000020;
     }
 }
+
+
+
+bitflags! {
+    #[derive(Clone, Copy)]
+    pub struct ImageAspect: u32 {
+        const COLOR = 0x00000001;
+        const DEPTH = 0x00000002;
+        const STENCIL = 0x00000004;
+    }
+}
+
+impl From<ImageAspect> for vk::ImageAspectFlags {
+    fn from(aspect: ImageAspect) -> Self {
+        let mut result = vk::ImageAspectFlags::empty();
+
+        if aspect.contains(ImageAspect::COLOR) {
+            result |= vk::ImageAspectFlags::COLOR;
+        }
+        
+        if aspect.contains(ImageAspect::DEPTH) {
+            result |= vk::ImageAspectFlags::DEPTH;
+        }
+        
+        if aspect.contains(ImageAspect::STENCIL) {
+            result |= vk::ImageAspectFlags::STENCIL;
+        }
+
+        result
+    }
+}
+
+impl Default for ImageAspect {
+    fn default() -> Self {
+        Self::COLOR
+    }
+}
+
 
 impl From<ImageUsage> for vk::ImageUsageFlags {
     fn from(usage: ImageUsage) -> Self {
@@ -138,7 +178,7 @@ impl From<ImageUsage> for vk::ImageUsageFlags {
             result |= vk::ImageUsageFlags::COLOR_ATTACHMENT;
         }
 
-        if usage.contains(ImageUsage::DEPTH) {
+        if usage.contains(ImageUsage::DEPTH_STENCIL) {
             result |= vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT;
         }
 

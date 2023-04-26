@@ -856,7 +856,7 @@ impl Device {
                 a: vk::ComponentSwizzle::IDENTITY,
             },
             subresource_range: vk::ImageSubresourceRange {
-                aspect_mask: format.into(),
+                aspect_mask: format.entire_aspect(),
                 base_mip_level: 0,
                 level_count: 1,
                 base_array_layer: 0,

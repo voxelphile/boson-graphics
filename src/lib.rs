@@ -36,13 +36,13 @@ pub mod prelude {
     pub use crate::device::{Device, DeviceInfo, DeviceSelector, Features};
     pub use crate::format::Format;
     pub(crate) use crate::image::InternalImage;
-    pub use crate::image::{Image, ImageExtent, ImageInfo, ImageLayout, ImageUsage};
+    pub use crate::image::{Image, ImageExtent, ImageInfo, ImageLayout, ImageUsage, ImageAspect};
     pub(crate) use crate::memory::InternalMemory;
     pub use crate::memory::Memory;
     pub use crate::pipeline::{
         Blend, BlendFactor, BlendOp, Color, ColorComponent, CompareOp, ComputePipelineInfo, Depth,
         FaceCull, GraphicsPipelineInfo, Pipeline, PipelineCompiler, PipelineCompilerInfo,
-        PipelineStage, Raster, Shader, ShaderCompiler, ShaderType,
+        PipelineStage, Raster, Shader, ShaderCompiler, ShaderType, Stencil, StencilState, StencilOp,
     };
     pub use crate::semaphore::{
         BinarySemaphore, BinarySemaphoreInfo, TimelineSemaphore, TimelineSemaphoreInfo,

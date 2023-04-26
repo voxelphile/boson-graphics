@@ -21,13 +21,22 @@ pub enum Format {
     Bgra8Unorm,
     Bgra8Srgb,
     D32Sfloat,
+    D32SfloatS8Uint
 }
 
-impl From<Format> for vk::ImageAspectFlags {
-    fn from(format: Format) -> Self {
-        match format {
+impl Format {
+    pub(crate) fn entire_aspect(&self) -> vk::ImageAspectFlags {
+        match self {
             Format::D32Sfloat => vk::ImageAspectFlags::DEPTH,
+            Format::D32SfloatS8Uint => vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
             _ => vk::ImageAspectFlags::COLOR,
+        }
+    }
+    pub(crate) fn is_depth_or_stencil(&self) -> bool {
+        match self {
+            Format::D32Sfloat 
+            | Format::D32SfloatS8Uint => true,
+            _ => false,
         }
     }
 }
@@ -51,10 +60,11 @@ impl TryFrom<vk::Format> for Format {
             vk::Format::R32G32B32_UINT => Rgb32Uint,
             vk::Format::R32G32B32A32_SFLOAT => Rgba32Sfloat,
             vk::Format::R8G8B8A8_UNORM => Rgba8Unorm,
-            vk::Format::R8G8B8A8_UNORM => Rgba8Srgb,
+            vk::Format::R8G8B8A8_SRGB => Rgba8Srgb,
             vk::Format::B8G8R8A8_UNORM => Bgra8Unorm,
             vk::Format::B8G8R8A8_SRGB => Bgra8Srgb,
             vk::Format::D32_SFLOAT => D32Sfloat,
+            vk::Format::D32_SFLOAT_S8_UINT => D32SfloatS8Uint,
             _ => Err(())?,
         })
     }
@@ -81,6 +91,7 @@ impl From<Format> for vk::Format {
             Bgra8Unorm => Self::B8G8R8A8_UNORM,
             Bgra8Srgb => Self::B8G8R8A8_SRGB,
             D32Sfloat => Self::D32_SFLOAT,
+            D32SfloatS8Uint => Self::D32_SFLOAT_S8_UINT
         }
     }
 }

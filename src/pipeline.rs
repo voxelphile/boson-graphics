@@ -347,9 +347,11 @@ impl PipelineCompiler {
 
         let rasterization_state = info.raster.into();
 
+        let depth_and_stencil = OptionalDepthStencil(info.depth, info.stencil);
+
         let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo {
             depth_test_enable: info.depth.is_some() as _,
-            ..info.depth.unwrap_or_default().into()
+            ..depth_and_stencil.into()
         };
 
         let color_attachments = info
@@ -999,14 +1001,79 @@ impl Default for Depth {
     }
 }
 
-impl From<Depth> for vk::PipelineDepthStencilStateCreateInfo {
-    fn from(depth: Depth) -> Self {
+#[derive(Clone, Copy, Default)]
+pub enum StencilOp {
+    #[default]
+    Keep,
+    Zero,
+    Replace,
+    IncrementAndClamp,
+    DecrementAndClamp,
+    Invert,
+    IncrementAndWrap,
+    DecrementAndWrap,
+}
+
+impl From<StencilOp> for vk::StencilOp {
+    fn from(op: StencilOp) -> Self {
+        match op {
+            StencilOp::Keep => vk::StencilOp::KEEP,
+            StencilOp::Zero => vk::StencilOp::ZERO,
+            StencilOp::Replace => vk::StencilOp::REPLACE,
+            StencilOp::IncrementAndClamp => vk::StencilOp::INCREMENT_AND_CLAMP,
+            StencilOp::DecrementAndClamp => vk::StencilOp::DECREMENT_AND_CLAMP,
+            StencilOp::Invert => vk::StencilOp::INVERT,
+            StencilOp::IncrementAndWrap => vk::StencilOp::INCREMENT_AND_WRAP,
+            StencilOp::DecrementAndWrap => vk::StencilOp::DECREMENT_AND_WRAP,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Stencil {
+    pub front: StencilState,
+    pub back: StencilState,
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct StencilState {
+    pub fail_op: StencilOp,
+    pub pass_op: StencilOp,
+    pub depth_fail_op: StencilOp,
+    pub compare_op: CompareOp,
+    pub compare_mask: u32,
+    pub write_mask: u32,
+    pub reference: u32,
+}
+
+impl From<StencilState> for vk::StencilOpState {
+    fn from(ss: StencilState) -> Self {
         Self {
-            depth_test_enable: true as _,
-            depth_write_enable: depth.write as _,
-            depth_compare_op: depth.compare.into(),
-            min_depth_bounds: depth.bounds.0 as _,
-            max_depth_bounds: depth.bounds.1 as _,
+            fail_op: ss.fail_op.into(),
+            pass_op: ss.pass_op.into(),
+            depth_fail_op: ss.depth_fail_op.into(),
+            compare_op: ss.compare_op.into(),
+            compare_mask: ss.compare_mask,
+            write_mask: ss.write_mask,
+            reference: ss.reference, 
+        }
+    }
+}
+
+struct OptionalDepthStencil(Option<Depth>, Option<Stencil>);
+
+impl From<OptionalDepthStencil> for vk::PipelineDepthStencilStateCreateInfo {
+    fn from(depth_and_stencil: OptionalDepthStencil) -> Self {
+        let OptionalDepthStencil(depth, stencil) = depth_and_stencil;
+        Self {
+            depth_test_enable: depth.is_some() as _,
+            depth_write_enable: depth.map(|d| d.write).unwrap_or_default() as _,
+            depth_compare_op: depth.map(|d| d.compare).unwrap_or_default().into(),
+            min_depth_bounds: depth.map(|d| d.bounds.0).unwrap_or_default() as _,
+            max_depth_bounds: depth.map(|d| d.bounds.1).unwrap_or(1.0) as _,
+            stencil_test_enable: stencil.is_some() as _, 
+            front: stencil.map(|s| s.front).unwrap_or_default().into(),
+            back: stencil.map(|s| s.back).unwrap_or_default().into(),
             ..default()
         }
     }
@@ -1017,6 +1084,7 @@ pub struct GraphicsPipelineInfo<'a, const S: usize, const C: usize> {
     pub shaders: [Shader<'a>; S],
     pub color: [Color; C],
     pub depth: Option<Depth>,
+    pub stencil: Option<Stencil>,
     pub raster: Raster,
     pub push_constant_size: usize,
     pub debug_name: &'a str,
@@ -1028,6 +1096,7 @@ impl<const S: usize, const C: usize> Default for GraphicsPipelineInfo<'_, S, C> 
             shaders: [default(); S],
             color: [default(); C],
             depth: None,
+            stencil: None,
             raster: default(),
             push_constant_size: 128,
             debug_name: "Pipeline",

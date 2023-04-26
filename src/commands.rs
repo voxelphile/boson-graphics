@@ -140,6 +140,7 @@ pub enum Barrier {
         new_layout: ImageLayout,
         src_access: Access,
         dst_access: Access,
+        image_aspect: ImageAspect,
     },
     Buffer {
         buffer: usize,
@@ -216,8 +217,8 @@ pub struct DrawIndexed {
     pub index_count: usize,
 }
 
-pub struct Render<const N: usize> {
-    pub color: [Attachment; N],
+pub struct Render {
+    pub color: Vec<Attachment>,
     pub depth: Option<Attachment>,
     pub render_area: RenderArea,
 }
@@ -225,6 +226,7 @@ pub struct Render<const N: usize> {
 pub enum Clear {
     Color(f32, f32, f32, f32),
     Depth(f32),
+    DepthStencil(f32, u8),
 }
 
 impl Default for Clear {
@@ -571,7 +573,7 @@ impl Commands<'_> {
             .get(*from_buffer_handle)
             .ok_or(Error::ResourceNotFound)?;
 
-        let Qualifier::Image(to_image_handle, to_image_access) = qualifiers.get(to).ok_or(Error::InvalidResource)? else {
+        let Qualifier::Image(to_image_handle, to_image_access, image_aspect) = qualifiers.get(to).ok_or(Error::InvalidResource)? else {
             Err(Error::InvalidResource)?
         };
 
@@ -600,7 +602,7 @@ impl Commands<'_> {
                 depth: size.2 as _,
             },
             image_subresource: vk::ImageSubresourceLayers {
-                aspect_mask: to_image_format.into(),
+                aspect_mask: (*image_aspect).into(),
                 mip_level: 0,
                 base_array_layer: 0,
                 layer_count: 1,
@@ -621,7 +623,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    pub fn start_rendering<const N: usize>(&mut self, render: Render<N>) -> Result<()> {
+    pub fn start_rendering(&mut self, render: Render) -> Result<()> {
         let Commands {
             device,
             qualifiers,
@@ -643,10 +645,10 @@ impl Commands<'_> {
 
         let resources = resources.lock().unwrap();
 
-        let mut color_rendering_attachment_infos = [default(); N];
+        let mut color_rendering_attachment_infos = vec![default(); color.len()];
 
         for (i, color) in color.iter().enumerate() {
-            let Qualifier::Image(color_handle, _) = qualifiers.get(color.image).ok_or(Error::InvalidResource)? else {
+            let Qualifier::Image(color_handle, _, _) = qualifiers.get(color.image).ok_or(Error::InvalidResource)? else {
                 Err(Error::InvalidResource)?
             };
 
@@ -677,7 +679,7 @@ impl Commands<'_> {
         }
 
         let depth_rendering_attachment_info = if let Some(depth) = depth {
-            let Qualifier::Image(depth_handle, _) = qualifiers.get(depth.image).ok_or(Error::InvalidResource)? else {
+            let Qualifier::Image(depth_handle, _, _) = qualifiers.get(depth.image).ok_or(Error::InvalidResource)? else {
                 Err(Error::InvalidResource)?
             };
 
@@ -687,15 +689,20 @@ impl Commands<'_> {
                 .ok_or(Error::ResourceNotFound)?
                 .get_image_view();
 
-            let Clear::Depth(clear_d) = depth.clear else {
-                Err(Error::InvalidAttachment)?
-            };
-
-            let clear_value = vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue {
-                    depth: clear_d,
-                    stencil: 0,
+            let clear_value = match depth.clear {
+                Clear::Depth(clear_d) => vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: clear_d,
+                        stencil: 0,
+                    },
                 },
+                Clear::DepthStencil(clear_d, clear_s) => vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: clear_d,
+                        stencil: clear_s as u32,
+                    },
+                },
+                _ => Err(Error::InvalidAttachment)?
             };
 
             Some(vk::RenderingAttachmentInfoKHR {
@@ -891,8 +898,9 @@ impl Commands<'_> {
                     new_layout,
                     src_access,
                     dst_access,
+                    image_aspect,
                 } => {
-                    let Qualifier::Image(image_handle, image_access) = qualifiers.get(image).ok_or(Error::InvalidResource)? else {
+                    let Qualifier::Image(image_handle, image_access, image_aspect) = qualifiers.get(image).ok_or(Error::InvalidResource)? else {
                     Err(Error::InvalidResource)?
                 };
 
@@ -917,7 +925,7 @@ impl Commands<'_> {
                     let new_layout = new_layout.into();
 
                     let subresource_range = vk::ImageSubresourceRange {
-                        aspect_mask: format.into(),
+                        aspect_mask: (*image_aspect).into(),
                         base_mip_level: 0,
                         level_count: 1,
                         base_array_layer: 0,
