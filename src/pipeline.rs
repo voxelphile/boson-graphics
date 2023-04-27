@@ -449,7 +449,7 @@ impl PipelineCompiler {
         let layout = unsafe { logical_device.create_pipeline_layout(&layout_create_info, None) }
             .map_err(|_| Error::Creation)?;
 
-        let depth_attachment_format = vk::Format::D32_SFLOAT;
+        let depth_attachment_format = info.depth.map(|x| x.format).unwrap_or(Format::Undefined).into();
 
         let mut pipeline_rendering_create_info = {
             let p_color_attachment_formats = color_attachment_formats.as_ptr();
@@ -988,6 +988,7 @@ impl From<CompareOp> for vk::CompareOp {
 pub struct Depth {
     pub write: bool,
     pub compare: CompareOp,
+    pub format: Format,
     pub bounds: (f32, f32),
 }
 
@@ -996,6 +997,7 @@ impl Default for Depth {
         Self {
             write: true,
             compare: default(),
+            format: Format::D32Sfloat,
             bounds: (0.0, 1.0),
         }
     }
