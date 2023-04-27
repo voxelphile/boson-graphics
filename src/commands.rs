@@ -256,7 +256,6 @@ impl From<LoadOp> for vk::AttachmentLoadOp {
 pub struct Attachment {
     pub image: usize,
     pub load_op: LoadOp,
-    pub format: Format,
     pub clear: Clear,
 }
 
