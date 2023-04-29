@@ -702,7 +702,7 @@ impl Commands<'_> {
                         stencil: clear_s as u32,
                     },
                 },
-                _ => Err(Error::InvalidAttachment)?
+                _ => Err(Error::InvalidAttachment)?,
             };
 
             Some(vk::RenderingAttachmentInfoKHR {
@@ -741,12 +741,15 @@ impl Commands<'_> {
                 .map(|r| r as *const _)
                 .unwrap_or(ptr::null());
 
+            let p_stencil_attachment = p_depth_attachment;
+
             vk::RenderingInfoKHR {
                 render_area,
                 layer_count,
                 color_attachment_count,
                 p_color_attachments,
                 p_depth_attachment,
+                p_stencil_attachment,
                 ..default()
             }
         };
@@ -824,18 +827,39 @@ impl Commands<'_> {
             ..
         } = self;
 
-        let DeviceInner { logical_device, resources, .. } = &*device;
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*device;
 
-        let DrawIndirect { buffer, offset, draw_count, stride } = draw_indirect;
+        let DrawIndirect {
+            buffer,
+            offset,
+            draw_count,
+            stride,
+        } = draw_indirect;
 
         let Qualifier::Buffer(buffer_handle, _) = qualifiers.get(buffer).ok_or(Error::InvalidResource)? else {
             Err(Error::InvalidResource)?
         };
 
-        let buffer = resources.lock().unwrap().buffers.get(*buffer_handle).ok_or(Error::ResourceNotFound)?.buffer;
+        let buffer = resources
+            .lock()
+            .unwrap()
+            .buffers
+            .get(*buffer_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .buffer;
 
         unsafe {
-            logical_device.cmd_draw_indirect(**command_buffer, buffer, offset as u64, draw_count as u32, stride as u32);
+            logical_device.cmd_draw_indirect(
+                **command_buffer,
+                buffer,
+                offset as u64,
+                draw_count as u32,
+                stride as u32,
+            );
         }
 
         Ok(())
@@ -859,10 +883,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    pub fn pipeline_barrier(
-        &mut self,
-        pipeline_barrier: PipelineBarrier,
-    ) -> Result<()> {
+    pub fn pipeline_barrier(&mut self, pipeline_barrier: PipelineBarrier) -> Result<()> {
         let PipelineBarrier {
             src_stage,
             dst_stage,

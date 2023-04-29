@@ -264,7 +264,7 @@ impl Context {
             })
             .collect::<Vec<_>>();
 
-        physical_devices.sort_by(|(a, _, _), (b, _, _)| b.cmp(a));
+        physical_devices.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
 
         let Some((_, physical_device, queue_family_index)) = physical_devices.pop() else {
             panic!("no suitable device found");

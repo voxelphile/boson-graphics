@@ -92,9 +92,7 @@ pub enum ImageLayout {
     ReadOnlyOptimal,
     TransferSrcOptimal,
     TransferDstOptimal,
-    ColorAttachmentOptimal,
-    DepthAttachmentOptimal,
-    DepthStencilAttachmentOptimal,
+    AttachmentOptimal,
     Present,
 }
 
@@ -106,9 +104,7 @@ impl From<ImageLayout> for vk::ImageLayout {
             ImageLayout::TransferSrcOptimal => Self::TRANSFER_SRC_OPTIMAL,
             ImageLayout::TransferDstOptimal => Self::TRANSFER_DST_OPTIMAL,
             ImageLayout::General => Self::GENERAL,
-            ImageLayout::ColorAttachmentOptimal => Self::COLOR_ATTACHMENT_OPTIMAL,
-            ImageLayout::DepthAttachmentOptimal => Self::DEPTH_ATTACHMENT_OPTIMAL,
-            ImageLayout::DepthStencilAttachmentOptimal => Self::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            ImageLayout::AttachmentOptimal => Self::ATTACHMENT_OPTIMAL,
             ImageLayout::Present => Self::PRESENT_SRC_KHR,
         }
     }
@@ -123,8 +119,6 @@ bitflags! {
         const DEPTH_STENCIL = 0x00000020;
     }
 }
-
-
 
 bitflags! {
     #[derive(Clone, Copy)]
@@ -142,11 +136,11 @@ impl From<ImageAspect> for vk::ImageAspectFlags {
         if aspect.contains(ImageAspect::COLOR) {
             result |= vk::ImageAspectFlags::COLOR;
         }
-        
+
         if aspect.contains(ImageAspect::DEPTH) {
             result |= vk::ImageAspectFlags::DEPTH;
         }
-        
+
         if aspect.contains(ImageAspect::STENCIL) {
             result |= vk::ImageAspectFlags::STENCIL;
         }
@@ -160,7 +154,6 @@ impl Default for ImageAspect {
         Self::COLOR
     }
 }
-
 
 impl From<ImageUsage> for vk::ImageUsageFlags {
     fn from(usage: ImageUsage) -> Self {

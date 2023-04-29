@@ -150,7 +150,6 @@ impl<T> Executable<'_, T> {
 }
 
 impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
-   
     extern "rust-call" fn call_mut(&mut self, args: (&mut T,)) {
         profiling::scope!("executable", "ev");
         let (home,) = args;
@@ -428,7 +427,7 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
                                 new_layout: (*dst).into(),
                                 src_access: (*src).into(),
                                 dst_access: (*dst).into(),
-                                image_aspect: (*image_aspect)
+                                image_aspect: (*image_aspect),
                             }],
                         });
 
@@ -437,13 +436,18 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
                 }
             }
 
-            let mut smart_barriers = HashMap::<(PipelineStage, PipelineStage), PipelineBarrier>::new();
+            let mut smart_barriers =
+                HashMap::<(PipelineStage, PipelineStage), PipelineBarrier>::new();
 
             for new_barrier in naive_barriers {
                 let key = (new_barrier.src_stage, new_barrier.dst_stage);
 
                 if smart_barriers.contains_key(&key) {
-                    smart_barriers.get_mut(&key).unwrap().barriers.extend(new_barrier.barriers);
+                    smart_barriers
+                        .get_mut(&key)
+                        .unwrap()
+                        .barriers
+                        .extend(new_barrier.barriers);
                 } else {
                     smart_barriers.insert(key, new_barrier);
                 }
@@ -614,7 +618,9 @@ impl From<ImageAccess> for PipelineStage {
             ImageAccess::None => PipelineStage::empty(),
             ImageAccess::Present => PipelineStage::ALL_COMMANDS,
             ImageAccess::TransferWrite | ImageAccess::TransferRead => PipelineStage::TRANSFER,
-            ImageAccess::DepthAttachmentReadOnly | ImageAccess::DepthAttachment | ImageAccess::DepthStencilAttachment => {
+            ImageAccess::DepthAttachmentReadOnly
+            | ImageAccess::DepthAttachment
+            | ImageAccess::DepthStencilAttachment => {
                 PipelineStage::EARLY_FRAGMENT_TESTS | PipelineStage::LATE_FRAGMENT_TESTS
             }
             ImageAccess::ShaderReadWrite
@@ -643,8 +649,8 @@ impl From<ImageAccess> for ImageLayout {
             ImageAccess::Present => ImageLayout::Present,
             ImageAccess::TransferWrite => ImageLayout::TransferDstOptimal,
             ImageAccess::TransferRead => ImageLayout::TransferSrcOptimal,
-            ImageAccess::DepthStencilAttachment => ImageLayout::DepthStencilAttachmentOptimal,
-            ImageAccess::DepthAttachment => ImageLayout::DepthAttachmentOptimal,
+            ImageAccess::DepthStencilAttachment => ImageLayout::AttachmentOptimal,
+            ImageAccess::DepthAttachment => ImageLayout::AttachmentOptimal,
             ImageAccess::DepthAttachmentReadOnly
             | ImageAccess::VertexShaderReadOnly
             | ImageAccess::FragmentShaderReadOnly
@@ -658,7 +664,7 @@ impl From<ImageAccess> for ImageLayout {
             | ImageAccess::FragmentShaderReadWrite
             | ImageAccess::ComputeShaderReadWrite
             | ImageAccess::ShaderReadWrite => ImageLayout::General,
-            ImageAccess::ColorAttachment => ImageLayout::ColorAttachmentOptimal,
+            ImageAccess::ColorAttachment => ImageLayout::AttachmentOptimal,
         }
     }
 }

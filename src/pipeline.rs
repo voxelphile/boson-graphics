@@ -449,7 +449,11 @@ impl PipelineCompiler {
         let layout = unsafe { logical_device.create_pipeline_layout(&layout_create_info, None) }
             .map_err(|_| Error::Creation)?;
 
-        let depth_attachment_format = info.depth.map(|x| x.format).unwrap_or(Format::Undefined).into();
+        let depth_attachment_format = info
+            .depth
+            .map(|x| x.format)
+            .unwrap_or(Format::Undefined)
+            .into();
 
         let mut pipeline_rendering_create_info = {
             let p_color_attachment_formats = color_attachment_formats.as_ptr();
@@ -679,7 +683,10 @@ impl PipelineCompiler {
         Ok(())
     }
 
-    pub fn refresh_compute_pipeline<'a, 'b: 'a>(&'a self, pipeline: &'a Pipeline<'b, 1, 0>) -> Result<()> {
+    pub fn refresh_compute_pipeline<'a, 'b: 'a>(
+        &'a self,
+        pipeline: &'a Pipeline<'b, 1, 0>,
+    ) -> Result<()> {
         let Spec::Compute(info) = pipeline.inner.spec else {
             Err(Error::InvalidResource)?
         };
@@ -1057,7 +1064,7 @@ impl From<StencilState> for vk::StencilOpState {
             compare_op: ss.compare_op.into(),
             compare_mask: ss.compare_mask,
             write_mask: ss.write_mask,
-            reference: ss.reference, 
+            reference: ss.reference,
         }
     }
 }
@@ -1073,7 +1080,7 @@ impl From<OptionalDepthStencil> for vk::PipelineDepthStencilStateCreateInfo {
             depth_compare_op: depth.map(|d| d.compare).unwrap_or_default().into(),
             min_depth_bounds: depth.map(|d| d.bounds.0).unwrap_or_default() as _,
             max_depth_bounds: depth.map(|d| d.bounds.1).unwrap_or(1.0) as _,
-            stencil_test_enable: stencil.is_some() as _, 
+            stencil_test_enable: stencil.is_some() as _,
             front: stencil.map(|s| s.front).unwrap_or_default().into(),
             back: stencil.map(|s| s.back).unwrap_or_default().into(),
             ..default()
