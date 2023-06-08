@@ -3,6 +3,7 @@ use crate::memory;
 use crate::pipeline::PipelineCompilerInner;
 use crate::prelude::*;
 use crate::semaphore::InternalSemaphore;
+use crate::task::RenderGraphInfo;
 
 use std::default::default;
 use std::ffi;
@@ -732,8 +733,11 @@ impl Device {
         }))
     }
 
-    pub fn create_executor<'a, T>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a, T>> {
-        let ExecutorInfo {
+    pub fn create_render_graph<'a, T>(
+        &self,
+        info: RenderGraphInfo<'a>,
+    ) -> Result<RenderGraphBuilder<'a, T>> {
+        let RenderGraphInfo {
             debug_name,
             swapchain,
         } = info;
@@ -750,7 +754,7 @@ impl Device {
             .get(swapchain)
             .ok_or(Error::ResourceNotFound)?;
 
-        Ok(Executor {
+        Ok(RenderGraphBuilder {
             device: self.inner.clone(),
             swapchain,
             nodes,

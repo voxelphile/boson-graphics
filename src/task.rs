@@ -27,28 +27,28 @@ pub struct Submit {
     pub signal_semaphore: Option<BinarySemaphore>,
 }
 
-pub struct ExecutorInfo<'a> {
+pub struct RenderGraphInfo<'a> {
     pub swapchain: Swapchain,
     pub debug_name: &'a str,
 }
 
-impl Default for ExecutorInfo<'_> {
+impl Default for RenderGraphInfo<'_> {
     fn default() -> Self {
         Self {
             swapchain: u32::MAX.into(),
-            debug_name: "Executor",
+            debug_name: "RenderGraphBuilder",
         }
     }
 }
 
-pub struct Executor<'a, T> {
+pub struct RenderGraphBuilder<'a, T> {
     pub(crate) device: Arc<DeviceInner>,
     pub(crate) swapchain: Swapchain,
     pub(crate) nodes: Vec<Node<'a, T>>,
     pub(crate) debug_name: String,
 }
 
-impl<'a, T> Executor<'a, T> {
+impl<'a, T> RenderGraphBuilder<'a, T> {
     pub fn add<'b: 'a, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'b>(
         &mut self,
         task: Task<T, F>,
@@ -61,8 +61,8 @@ impl<'a, T> Executor<'a, T> {
         });
     }
 
-    pub fn complete(self) -> Result<Executable<'a, T>> {
-        let Executor {
+    pub fn complete(self) -> Result<RenderGraph<'a, T>> {
+        let RenderGraphBuilder {
             device,
             nodes,
             swapchain,
@@ -105,13 +105,13 @@ impl<'a, T> Executor<'a, T> {
 
         let current_instant = time::Instant::now();
 
-        Ok(Executable {
-            inner: Arc::new(ExecutableInner {
+        Ok(RenderGraph {
+            inner: Arc::new(RenderGraphInner {
                 device: device.clone(),
                 command_buffers,
                 fences,
                 swapchain,
-                modify: Mutex::new(ExecutableModify {
+                modify: Mutex::new(RenderGraphModify {
                     nodes,
                     current_instant,
                     last_instant: current_instant,
@@ -121,11 +121,11 @@ impl<'a, T> Executor<'a, T> {
     }
 }
 
-pub struct Executable<'a, T> {
-    inner: Arc<ExecutableInner<'a, T>>,
+pub struct RenderGraph<'a, T> {
+    inner: Arc<RenderGraphInner<'a, T>>,
 }
 
-impl<'a, T> Clone for Executable<'a, T> {
+impl<'a, T> Clone for RenderGraph<'a, T> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -133,21 +133,21 @@ impl<'a, T> Clone for Executable<'a, T> {
     }
 }
 
-pub struct ExecutableInner<'a, T> {
+pub struct RenderGraphInner<'a, T> {
     pub(crate) device: Arc<DeviceInner>,
     pub(crate) swapchain: Swapchain,
     pub(crate) command_buffers: Vec<vk::CommandBuffer>,
     pub(crate) fences: Vec<vk::Fence>,
-    pub(crate) modify: Mutex<ExecutableModify<'a, T>>,
+    pub(crate) modify: Mutex<RenderGraphModify<'a, T>>,
 }
 
-pub struct ExecutableModify<'a, T> {
+pub struct RenderGraphModify<'a, T> {
     pub(crate) current_instant: time::Instant,
     pub(crate) last_instant: time::Instant,
     pub(crate) nodes: Vec<Node<'a, T>>,
 }
 
-impl<T> Executable<'_, T> {
+impl<T> RenderGraph<'_, T> {
     pub fn frame_time(&self) -> time::Duration {
         let modify = self.inner.modify.lock().unwrap();
 
@@ -155,12 +155,12 @@ impl<T> Executable<'_, T> {
     }
 }
 
-impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
+impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
     extern "rust-call" fn call_mut(&mut self, args: (&mut T,)) {
-        profiling::scope!("executable", "ev");
+        profiling::scope!("RenderGraph", "ev");
         let (home,) = args;
 
-        let ExecutableInner {
+        let RenderGraphInner {
             device,
             command_buffers,
             fences,
@@ -581,7 +581,7 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
     }
 }
 
-impl<T> ops::FnOnce<(&mut T,)> for Executable<'_, T> {
+impl<T> ops::FnOnce<(&mut T,)> for RenderGraph<'_, T> {
     type Output = ();
 
     extern "rust-call" fn call_once(mut self, args: (&mut T,)) {
