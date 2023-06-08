@@ -24,11 +24,11 @@ use std::result;
 
 pub mod prelude {
     pub(crate) use crate::buffer::InternalBuffer;
-    pub use crate::buffer::{Buffer, BufferInfo, BufferAddress, BufferUsage};
+    pub use crate::buffer::{Buffer, BufferAddress, BufferInfo, BufferUsage};
     pub use crate::commands::{
-        Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferRead, BufferWrite, Clear,
-        Commands, Draw, DrawIndexed, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Render,
-        RenderArea, DrawIndirect, DrawIndirectCommand,
+        Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferImageCopy, BufferRead,
+        BufferWrite, Clear, Commands, Draw, DrawIndexed, DrawIndirect, DrawIndirectCommand,
+        ImageCopy, LoadOp, PipelineBarrier, PushConstant, Render, RenderArea,
     };
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};
@@ -36,13 +36,14 @@ pub mod prelude {
     pub use crate::device::{Device, DeviceInfo, DeviceSelector, Features};
     pub use crate::format::Format;
     pub(crate) use crate::image::InternalImage;
-    pub use crate::image::{Image, ImageExtent, ImageInfo, ImageLayout, ImageUsage, ImageAspect};
+    pub use crate::image::{Image, ImageAspect, ImageExtent, ImageInfo, ImageLayout, ImageUsage};
     pub(crate) use crate::memory::InternalMemory;
     pub use crate::memory::Memory;
     pub use crate::pipeline::{
         Blend, BlendFactor, BlendOp, Color, ColorComponent, CompareOp, ComputePipelineInfo, Depth,
-        FaceCull, GraphicsPipelineInfo, Pipeline, PipelineCompiler, PipelineCompilerInfo,
-        PipelineStage, Raster, Shader, ShaderCompiler, ShaderType, Stencil, StencilState, StencilOp,
+        FaceCull, FrontFace, GraphicsPipelineInfo, Pipeline, PipelineCompiler,
+        PipelineCompilerInfo, PipelineStage, PolygonMode, Raster, Shader, ShaderCompiler,
+        ShaderType, Stencil, StencilOp, StencilState,
     };
     pub use crate::semaphore::{
         BinarySemaphore, BinarySemaphoreInfo, TimelineSemaphore, TimelineSemaphoreInfo,
@@ -53,8 +54,8 @@ pub mod prelude {
     };
     pub(crate) use crate::task::Qualifier;
     pub use crate::task::{
-        BufferAccess, Executable, Executor, ExecutorInfo, ImageAccess, Present,
-        Resource, Submit, Task,
+        BufferAccess, Executable, Executor, ExecutorInfo, ImageAccess, Present, Resource, Submit,
+        Task,
     };
     pub use crate::{Error, Result};
 }

@@ -176,6 +176,7 @@ pub struct BufferWrite<'a, T: Copy> {
 pub struct BufferRead {
     pub buffer: usize,
     pub offset: usize,
+    pub size: usize,
 }
 
 pub struct BufferCopy {
@@ -194,6 +195,14 @@ pub struct ImageCopy {
     pub size: (usize, usize, usize),
 }
 
+pub struct BufferImageCopy {
+    pub from: usize,
+    pub to: usize,
+    pub src: (usize, usize, usize),
+    pub dst: usize,
+    pub size: (usize, usize, usize),
+}
+
 pub struct Draw {
     pub vertex_count: usize,
 }
@@ -205,7 +214,8 @@ pub struct DrawIndirect {
     pub stride: usize,
 }
 
-#[derive(Clone, Copy)]
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct DrawIndirectCommand {
     pub vertex_count: u32,
     pub instance_count: u32,
@@ -220,6 +230,7 @@ pub struct DrawIndexed {
 pub struct Render {
     pub color: Vec<Attachment>,
     pub depth: Option<Attachment>,
+    pub use_stencil: bool,
     pub render_area: RenderArea,
 }
 
@@ -382,7 +393,7 @@ impl Commands<'_> {
         let dst = unsafe {
             logical_device.map_memory(*memory, offset as _, size as _, vk::MemoryMapFlags::empty())
         }
-        .map_err(|_| Error::MemoryMapFailed)?;
+        .map_err(|e| Error::MemoryMapFailed)?;
 
         unsafe { slice::from_raw_parts_mut(dst as *mut T, src.len()) }.copy_from_slice(src);
 
@@ -393,7 +404,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    pub fn read_buffer<T: Copy>(&mut self, read: BufferRead) -> Result<T> {
+    pub fn read_buffer(&mut self, read: BufferRead) -> Result<Vec<u8>> {
         let Commands {
             device,
             qualifiers,
@@ -407,7 +418,11 @@ impl Commands<'_> {
             ..
         } = &*device;
 
-        let BufferRead { buffer, offset } = read;
+        let BufferRead {
+            buffer,
+            offset,
+            size,
+        } = read;
 
         let resources = resources.lock().unwrap();
 
@@ -422,15 +437,18 @@ impl Commands<'_> {
 
         let InternalMemory { memory, .. } = memory;
 
-        let size = mem::size_of::<T>();
-
         let src = unsafe {
             logical_device.map_memory(*memory, offset as _, size as _, vk::MemoryMapFlags::empty())
         }
-        .map_err(|_| Error::MemoryMapFailed)?;
+        .map_err(|e| {
+            dbg!(e);
+            Error::MemoryMapFailed
+        })?;
 
-        let dst = unsafe { ptr::read::<T>(src as *const T) };
+        let mut dst = Vec::with_capacity(size);
 
+        unsafe { ptr::copy(src as *const u8, dst.as_mut_ptr(), size) };
+        unsafe { dst.set_len(size) };
         unsafe {
             logical_device.unmap_memory(*memory);
         }
@@ -438,7 +456,7 @@ impl Commands<'_> {
         Ok(dst)
     }
 
-    pub fn set_resolution(&mut self, resolution: (u32, u32)) -> Result<()> {
+    pub fn set_resolution(&mut self, resolution: (u32, u32), flip_y: bool) -> Result<()> {
         let (width, height) = resolution;
 
         let Commands {
@@ -451,9 +469,13 @@ impl Commands<'_> {
 
         let viewport = vk::Viewport {
             x: 0.0,
-            y: 0.0,
+            y: if flip_y { height as f32 } else { 0.0 },
             width: width as f32,
-            height: height as f32,
+            height: if flip_y {
+                -(height as f32)
+            } else {
+                height as f32
+            },
             min_depth: 0.0,
             max_depth: 1.0,
         };
@@ -623,6 +645,92 @@ impl Commands<'_> {
         Ok(())
     }
 
+    pub fn copy_image_to_buffer(&mut self, copy: BufferImageCopy) -> Result<()> {
+        let Commands {
+            device,
+            qualifiers,
+            command_buffer,
+            ..
+        } = self;
+
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*device;
+
+        let BufferImageCopy {
+            from,
+            to,
+            src,
+            dst,
+            size,
+        } = copy;
+
+        let resources = resources.lock().unwrap();
+
+        let Qualifier::Buffer(from_buffer_handle, _) = qualifiers.get(to).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let InternalBuffer {
+            buffer: from_buffer,
+            ..
+        } = resources
+            .buffers
+            .get(*from_buffer_handle)
+            .ok_or(Error::ResourceNotFound)?;
+
+        let Qualifier::Image(to_image_handle, to_image_access, image_aspect) = qualifiers.get(from).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let to_image = resources
+            .images
+            .get(*to_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_image();
+
+        let to_image_format = resources
+            .images
+            .get(*to_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_format();
+
+        let regions = [vk::BufferImageCopy {
+            buffer_offset: dst as _,
+            image_offset: vk::Offset3D {
+                x: src.0 as _,
+                y: src.1 as _,
+                z: src.2 as _,
+            },
+            image_extent: vk::Extent3D {
+                width: size.0 as _,
+                height: size.1 as _,
+                depth: size.2 as _,
+            },
+            image_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: (*image_aspect).into(),
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            ..default()
+        }];
+
+        unsafe {
+            logical_device.cmd_copy_image_to_buffer(
+                **command_buffer,
+                to_image,
+                ImageLayout::from(*to_image_access).into(),
+                *from_buffer,
+                &regions,
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn start_rendering(&mut self, render: Render) -> Result<()> {
         let Commands {
             device,
@@ -640,6 +748,7 @@ impl Commands<'_> {
         let Render {
             color,
             depth,
+            use_stencil,
             render_area,
         } = render;
 
@@ -741,7 +850,11 @@ impl Commands<'_> {
                 .map(|r| r as *const _)
                 .unwrap_or(ptr::null());
 
-            let p_stencil_attachment = p_depth_attachment;
+            let p_stencil_attachment = if use_stencil {
+                p_depth_attachment
+            } else {
+                ptr::null()
+            };
 
             vk::RenderingInfoKHR {
                 render_area,

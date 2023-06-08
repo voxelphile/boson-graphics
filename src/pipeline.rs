@@ -340,8 +340,14 @@ impl PipelineCompiler {
 
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default();
 
+        let topology = match info.raster.polygon_mode {
+            PolygonMode::Fill => vk::PrimitiveTopology::TRIANGLE_LIST,
+            PolygonMode::Line => vk::PrimitiveTopology::LINE_LIST,
+            PolygonMode::Point => vk::PrimitiveTopology::POINT_LIST,
+        };
+
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
+            topology,
             ..default()
         };
 
@@ -532,7 +538,7 @@ impl PipelineCompiler {
     pub fn create_compute_pipeline<'a, 'b: 'a>(
         &'a self,
         info: ComputePipelineInfo<'b>,
-    ) -> Result<Pipeline<1, 0>> {
+    ) -> Result<Pipeline<'b, 1, 0>> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
         let DeviceInner {
@@ -738,7 +744,7 @@ impl From<PolygonMode> for vk::PolygonMode {
 }
 
 bitflags! {
-    #[derive(Default, Copy, Clone)]
+    #[derive(Default, Copy, Clone, Hash, PartialEq, Eq, Debug)]
     pub struct FaceCull : u32 {
         const FRONT = 0x00000002;
         const BACK = 0x00000004;

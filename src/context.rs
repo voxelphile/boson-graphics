@@ -24,7 +24,7 @@ pub(crate) const SPECIAL_IMAGE_BINDING: u32 = 2;
 pub(crate) const SPECIAL_BUFFER_BINDING: u32 = 3;
 pub(crate) const DEVICE_ADDRESS_BUFFER_BINDING: u32 = 4;
 
-pub(crate) const DESCRIPTOR_COUNT: u32 = 1_000;
+pub(crate) const DESCRIPTOR_COUNT: u32 = 2_000;
 
 unsafe extern "system" fn debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -337,7 +337,6 @@ impl Context {
             vk::PhysicalDeviceDescriptorIndexingFeatures {
                 p_next,
                 runtime_descriptor_array: true as _,
-
                 descriptor_binding_partially_bound: true as _,
                 descriptor_binding_update_unused_while_pending: true as _,
                 descriptor_binding_storage_buffer_update_after_bind: true as _,

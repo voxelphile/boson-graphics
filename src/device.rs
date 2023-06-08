@@ -66,7 +66,7 @@ impl<T, U: Into<u32> + From<u32> + Copy> DeviceResource<T, U> {
     pub fn add(&mut self, repr: T) -> U {
         if self.available.len() > 0 {
             let index = self.available.pop().unwrap();
-            self.reprs.insert(index as usize, Some(repr));
+            self.reprs[index as usize] = Some(repr);
             index
         } else {
             let index = self.reprs.len();
@@ -132,6 +132,7 @@ impl DeviceResources {
     }
 }
 
+#[derive(Clone)]
 pub struct Device {
     pub(crate) inner: Arc<DeviceInner>,
 }
@@ -709,14 +710,26 @@ impl From<vk::PhysicalDeviceLimits> for Limits {
 
 impl Device {
     pub fn address(&self, buffer: Buffer) -> Result<BufferAddress> {
-        let DeviceInner { logical_device, resources, .. } = &*self.inner;
-        
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*self.inner;
+
         let buffer_device_address_info = vk::BufferDeviceAddressInfo {
-            buffer: resources.lock().unwrap().buffers.get(buffer).ok_or(Error::InvalidResource)?.buffer,
+            buffer: resources
+                .lock()
+                .unwrap()
+                .buffers
+                .get(buffer)
+                .ok_or(Error::InvalidResource)?
+                .buffer,
             ..default()
         };
 
-        Ok(BufferAddress(unsafe { logical_device.get_buffer_device_address(&buffer_device_address_info) }))
+        Ok(BufferAddress(unsafe {
+            logical_device.get_buffer_device_address(&buffer_device_address_info)
+        }))
     }
 
     pub fn create_executor<'a, T>(&self, info: ExecutorInfo<'a>) -> Result<Executor<'a, T>> {
@@ -876,6 +889,28 @@ impl Device {
         }))
     }
 
+    pub fn destroy_buffer(&self, buffer: Buffer) -> Result<()> {
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*self.inner;
+
+        let mut resources = resources.lock().unwrap();
+
+        let internal_buffer = resources
+            .buffers
+            .remove(buffer)
+            .ok_or(Error::ResourceNotFound)?;
+
+        unsafe {
+            logical_device.destroy_buffer(internal_buffer.buffer, None);
+            logical_device.free_memory(internal_buffer.memory.memory, None);
+        };
+
+        return Ok(());
+    }
+
     pub fn create_buffer(&self, info: BufferInfo<'_>) -> Result<Buffer> {
         let DeviceInner {
             context,
@@ -943,7 +978,7 @@ impl Device {
         };
 
         let memory = unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
-            .map_err(|_| Error::Creation)?;
+            .map_err(|_| Error::AllocateMemory)?;
 
         unsafe { logical_device.bind_buffer_memory(buffer, memory, 0) }
             .map_err(|_| Error::Creation)?;

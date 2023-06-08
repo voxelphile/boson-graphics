@@ -40,6 +40,7 @@ impl InternalImage {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum ImageExtent {
     OneDim(usize),
     TwoDim(usize, usize),
@@ -70,8 +71,9 @@ impl Default for ImageInfo<'_> {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-pub struct Image(pub(crate) u32);
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+#[repr(transparent)]
+pub struct Image(pub u32);
 
 impl From<Image> for u32 {
     fn from(handle: Image) -> Self {

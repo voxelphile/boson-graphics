@@ -2,7 +2,7 @@ use std::mem;
 
 use ash::vk;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Format {
     #[default]
     Undefined,
@@ -21,7 +21,7 @@ pub enum Format {
     Bgra8Unorm,
     Bgra8Srgb,
     D32Sfloat,
-    D32SfloatS8Uint
+    D32SfloatS8Uint,
 }
 
 impl Format {
@@ -34,8 +34,7 @@ impl Format {
     }
     pub(crate) fn is_depth_or_stencil(&self) -> bool {
         match self {
-            Format::D32Sfloat 
-            | Format::D32SfloatS8Uint => true,
+            Format::D32Sfloat | Format::D32SfloatS8Uint => true,
             _ => false,
         }
     }
@@ -91,7 +90,7 @@ impl From<Format> for vk::Format {
             Bgra8Unorm => Self::B8G8R8A8_UNORM,
             Bgra8Srgb => Self::B8G8R8A8_SRGB,
             D32Sfloat => Self::D32_SFLOAT,
-            D32SfloatS8Uint => Self::D32_SFLOAT_S8_UINT
+            D32SfloatS8Uint => Self::D32_SFLOAT_S8_UINT,
         }
     }
 }

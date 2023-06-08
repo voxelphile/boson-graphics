@@ -8,11 +8,11 @@ use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::default::default;
 use std::marker::PhantomData;
-use std::mem;
 use std::ops;
 use std::slice;
 use std::sync::{Arc, Mutex};
 use std::time;
+use std::{mem, ptr};
 
 use ash::vk;
 
@@ -23,8 +23,8 @@ pub struct Present {
 }
 
 pub struct Submit {
-    pub wait_semaphore: BinarySemaphore,
-    pub signal_semaphore: BinarySemaphore,
+    pub wait_semaphore: Option<BinarySemaphore>,
+    pub signal_semaphore: Option<BinarySemaphore>,
 }
 
 pub struct ExecutorInfo<'a> {
@@ -103,9 +103,7 @@ impl<'a, T> Executor<'a, T> {
             fences.push(fence);
         }
 
-        let fps_instant = time::Instant::now();
-        let fps_counter = 0;
-        let fps = 0;
+        let current_instant = time::Instant::now();
 
         Ok(Executable {
             inner: Arc::new(ExecutableInner {
@@ -115,9 +113,8 @@ impl<'a, T> Executor<'a, T> {
                 swapchain,
                 modify: Mutex::new(ExecutableModify {
                     nodes,
-                    fps_instant,
-                    fps_counter,
-                    fps,
+                    current_instant,
+                    last_instant: current_instant,
                 }),
             }),
         })
@@ -126,6 +123,14 @@ impl<'a, T> Executor<'a, T> {
 
 pub struct Executable<'a, T> {
     inner: Arc<ExecutableInner<'a, T>>,
+}
+
+impl<'a, T> Clone for Executable<'a, T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 pub struct ExecutableInner<'a, T> {
@@ -137,15 +142,16 @@ pub struct ExecutableInner<'a, T> {
 }
 
 pub struct ExecutableModify<'a, T> {
-    pub(crate) fps_instant: time::Instant,
-    pub(crate) fps_counter: usize,
-    pub(crate) fps: usize,
+    pub(crate) current_instant: time::Instant,
+    pub(crate) last_instant: time::Instant,
     pub(crate) nodes: Vec<Node<'a, T>>,
 }
 
 impl<T> Executable<'_, T> {
-    pub fn fps(&self) -> usize {
-        self.inner.modify.lock().unwrap().fps
+    pub fn frame_time(&self) -> time::Duration {
+        let modify = self.inner.modify.lock().unwrap();
+
+        modify.current_instant.duration_since(modify.last_instant)
     }
 }
 
@@ -202,18 +208,11 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
                     logical_device.wait_for_fences(&[fences[current_frame]], true, 0)
                 {
                     return;
-                } else if time::Instant::now()
-                    .duration_since(modify.fps_instant)
-                    .as_secs_f64()
-                    > 1.0
-                {
-                    modify.fps_instant = time::Instant::now();
-                    modify.fps = modify.fps_counter;
-                    modify.fps_counter = 0;
-                } else {
-                    modify.fps_counter += 1;
                 }
             }
+
+            modify.last_instant = modify.current_instant;
+            modify.current_instant = time::Instant::now();
 
             unsafe {
                 logical_device.reset_fences(&[fences[current_frame]]);
@@ -464,7 +463,6 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
             for (_, barrier) in smart_barriers {
                 commands.pipeline_barrier(barrier).unwrap();
             }
-
             (node.task)(home, &mut commands).unwrap();
         }
 
@@ -484,21 +482,25 @@ impl<T> ops::FnMut<(&mut T,)> for Executable<'_, T> {
             let submit_info = {
                 let p_wait_dst_stage_mask = wait_dst_stage_mask.as_ptr();
 
-                let wait_semaphore_count = 1;
+                let wait_semaphore_count = submit.wait_semaphore.is_some() as u32;
 
-                let p_wait_semaphores = &resources
-                    .binary_semaphores
-                    .get(submit.wait_semaphore)
-                    .unwrap()
-                    .semaphores[current_frame];
+                let p_wait_semaphores = submit.wait_semaphore.map(|x| {
+                    &resources.binary_semaphores.get(x).unwrap().semaphores[current_frame]
+                });
 
-                let signal_semaphore_count = 1;
+                let p_wait_semaphores = p_wait_semaphores
+                    .map(|x| x as *const _)
+                    .unwrap_or(ptr::null());
 
-                let p_signal_semaphores = &resources
-                    .binary_semaphores
-                    .get(submit.signal_semaphore)
-                    .unwrap()
-                    .semaphores[current_frame];
+                let signal_semaphore_count = submit.signal_semaphore.is_some() as u32;
+
+                let p_signal_semaphores = submit.signal_semaphore.map(|x| {
+                    &resources.binary_semaphores.get(x).unwrap().semaphores[current_frame]
+                });
+
+                let p_signal_semaphores = p_signal_semaphores
+                    .map(|x| x as *const _)
+                    .unwrap_or(ptr::null());
 
                 let command_buffer_count = 1;
 
