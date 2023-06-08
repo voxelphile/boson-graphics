@@ -9,7 +9,7 @@ A Vulkan abstraction layer that makes graphics easy and enjoyable.
 - [x] Bindless shader resource model.
 - [x] Render graph implementation: featuring resource tracking and automatic synchronization.
 - [ ] Render graph optimization: There is still more work to do to make this as fast as possible.
-- [ ] Full Vulkan support: I wan't this library to allow you to do anything Vulkan offers, so if something is not present, submit an issue or PR.
+- [ ] Full Vulkan support: I want this library to allow you to do anything Vulkan offers, so if something is not present, submit an issue or PR.
 
 ## Todo / Ideas for improvement
 
