@@ -16,3 +16,6 @@ raw-window-handle = "0.5.0"
 bitflags = "2.1.0"
 lazy_static = "1.4.0"
 profiling = "1.0.8"
+
+[workspace]
+members = ["./", "examples/*"]

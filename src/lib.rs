@@ -44,7 +44,8 @@ pub mod prelude {
     pub use crate::swapchain::{Acquire, PresentMode, Swapchain, SwapchainInfo};
     pub(crate) use crate::task::Qualifier;
     pub use crate::task::{
-        BufferAccess, ImageAccess, Present, RenderGraph, RenderGraphBuilder, Resource, Submit, Task,
+        BufferAccess, ImageAccess, Present, RenderGraph, RenderGraphBuilder, RenderGraphInfo,
+        Resource, Submit, Task,
     };
     pub use crate::{Error, Result};
 }

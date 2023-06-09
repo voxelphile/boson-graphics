@@ -17,6 +17,7 @@ Have an idea? Let me know through an issue or PR.
 
 - Create documentation.
 - Create examples.
+- Fix all warnings.
 - Add debug naming of resources for RenderDoc.
 - Conditional render graph tasks.
 - Built-in error handling. (no more having to use Vulkan Configuration / debug messaging)
@@ -24,6 +25,7 @@ Have an idea? Let me know through an issue or PR.
 - Add hardware raytracing support.
 - Better glslang integration. (stop using Vulkan SDK through shell process and instead integrate through bindings)
 - Custom compiler traits and more shader language support? (HLSL)
+- Remove pub(crate) items from the prelude.
 
 ## Design Philosophy
 

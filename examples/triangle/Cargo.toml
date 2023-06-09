@@ -1,0 +1,12 @@
+[package]
+name = "triangle"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+boson = { path = "../../" }
+winit = "0.28.6"
+raw-window-handle = "0.5.2"
+semver = "1.0.17"
