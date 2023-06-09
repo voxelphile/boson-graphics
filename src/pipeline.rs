@@ -2,7 +2,6 @@ use crate::device::DeviceInner;
 use crate::prelude::*;
 
 use std::borrow;
-use std::default::default;
 use std::env;
 use std::ffi;
 use std::fmt;
@@ -171,24 +170,15 @@ impl ShaderCompiler {
                             message: String::from("failed to wait on glslc"),
                         })?;
 
-                let spv = glslc
-                    .status
-                    .exit_ok()
-                    .map(|_| {
-                        fs::read(options.output_path)
-                            .expect("failed to read shader compilation output")
-                            .chunks(4)
-                            .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
-                            .collect::<Vec<_>>()
-                    })
-                    .map_err(|e| {
-                        dbg!(e);
-                        Error::ShaderCompilationError {
-                            message: String::from("glsl error"),
-                        }
-                    })?;
+                let spv = fs::read(options.output_path)
+                    .expect(
+                        "failed to read shader compilation output. it may have failed to compile.",
+                    )
+                    .chunks(4)
+                    .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
+                    .collect::<Vec<_>>();
 
-                fs::remove_file(temporary_path);
+                fs::remove_file(temporary_path).expect("failed to remove temporary file.");
 
                 Ok(spv)
             }
@@ -297,7 +287,7 @@ impl PipelineCompiler {
                     vk::ShaderModuleCreateInfo {
                         code_size,
                         p_code,
-                        ..default()
+                        ..Default::default()
                     }
                 };
 
@@ -333,7 +323,7 @@ impl PipelineCompiler {
                     stage,
                     module,
                     p_name,
-                    ..default()
+                    ..Default::default()
                 }
             })
             .collect::<Vec<_>>();
@@ -348,7 +338,7 @@ impl PipelineCompiler {
 
         let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo {
             topology,
-            ..default()
+            ..Default::default()
         };
 
         let rasterization_state = info.raster.into();
@@ -386,7 +376,7 @@ impl PipelineCompiler {
                 logic_op_enable: false as _,
                 attachment_count,
                 p_attachments,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -408,7 +398,7 @@ impl PipelineCompiler {
                 p_viewports,
                 scissor_count,
                 p_scissors,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -422,7 +412,7 @@ impl PipelineCompiler {
             vk::PipelineDynamicStateCreateInfo {
                 dynamic_state_count,
                 p_dynamic_states,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -448,7 +438,7 @@ impl PipelineCompiler {
                 p_set_layouts,
                 push_constant_range_count,
                 p_push_constant_ranges,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -468,7 +458,7 @@ impl PipelineCompiler {
                 color_attachment_count,
                 p_color_attachment_formats,
                 depth_attachment_format,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -508,7 +498,7 @@ impl PipelineCompiler {
                 p_dynamic_state,
                 render_pass,
                 layout,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -583,7 +573,7 @@ impl PipelineCompiler {
                 vk::ShaderModuleCreateInfo {
                     code_size,
                     p_code,
-                    ..default()
+                    ..Default::default()
                 }
             };
 
@@ -606,7 +596,7 @@ impl PipelineCompiler {
                 stage,
                 module,
                 p_name,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -632,7 +622,7 @@ impl PipelineCompiler {
                 p_set_layouts,
                 push_constant_range_count,
                 p_push_constant_ranges,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -643,7 +633,7 @@ impl PipelineCompiler {
             vk::ComputePipelineCreateInfo {
                 stage,
                 layout,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -821,14 +811,14 @@ pub struct Raster {
 impl Default for Raster {
     fn default() -> Self {
         Self {
-            polygon_mode: default(),
-            face_cull: default(),
-            front_face: default(),
-            depth_clamp: default(),
-            depth_bias: default(),
-            depth_bias_constant_factor: default(),
-            depth_bias_clamp: default(),
-            depth_bias_slope_factor: default(),
+            polygon_mode: Default::default(),
+            face_cull: Default::default(),
+            front_face: Default::default(),
+            depth_clamp: Default::default(),
+            depth_bias: Default::default(),
+            depth_bias_constant_factor: Default::default(),
+            depth_bias_clamp: Default::default(),
+            depth_bias_slope_factor: Default::default(),
             line_width: 1.0,
         }
     }
@@ -847,7 +837,7 @@ impl From<Raster> for vk::PipelineRasterizationStateCreateInfo {
             depth_bias_clamp: raster.depth_bias_clamp,
             depth_bias_slope_factor: raster.depth_bias_slope_factor,
             line_width: raster.line_width,
-            ..default()
+            ..Default::default()
         }
     }
 }
@@ -963,8 +953,8 @@ pub struct Color {
 impl Default for Color {
     fn default() -> Self {
         Self {
-            format: default(),
-            blend: Some(default()),
+            format: Default::default(),
+            blend: Some(Default::default()),
         }
     }
 }
@@ -1009,7 +999,7 @@ impl Default for Depth {
     fn default() -> Self {
         Self {
             write: true,
-            compare: default(),
+            compare: Default::default(),
             format: Format::D32Sfloat,
             bounds: (0.0, 1.0),
         }
@@ -1089,7 +1079,7 @@ impl From<OptionalDepthStencil> for vk::PipelineDepthStencilStateCreateInfo {
             stencil_test_enable: stencil.is_some() as _,
             front: stencil.map(|s| s.front).unwrap_or_default().into(),
             back: stencil.map(|s| s.back).unwrap_or_default().into(),
-            ..default()
+            ..Default::default()
         }
     }
 }
@@ -1108,11 +1098,11 @@ pub struct GraphicsPipelineInfo<'a, const S: usize, const C: usize> {
 impl<const S: usize, const C: usize> Default for GraphicsPipelineInfo<'_, S, C> {
     fn default() -> Self {
         Self {
-            shaders: [default(); S],
-            color: [default(); C],
+            shaders: [Default::default(); S],
+            color: [Default::default(); C],
             depth: None,
             stencil: None,
-            raster: default(),
+            raster: Default::default(),
             push_constant_size: 128,
             debug_name: "Pipeline",
         }

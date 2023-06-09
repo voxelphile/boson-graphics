@@ -3,7 +3,6 @@ use crate::memory;
 use crate::prelude::*;
 
 use std::borrow;
-use std::default::default;
 use std::ffi;
 use std::mem;
 use std::os::raw;
@@ -124,7 +123,7 @@ impl Context {
                 application_version,
                 p_engine_name,
                 engine_version,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -160,7 +159,7 @@ impl Context {
                 pp_enabled_layer_names,
                 enabled_extension_count,
                 pp_enabled_extension_names,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -180,7 +179,7 @@ impl Context {
                     | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
                 pfn_user_callback: Some(debug_callback),
-                ..default()
+                ..Default::default()
             })
         } else {
             None
@@ -287,7 +286,7 @@ impl Context {
         let mut maintenance4_features = {
             vk::PhysicalDeviceMaintenance4Features {
                 maintenance4: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -297,7 +296,7 @@ impl Context {
             vk::PhysicalDeviceRobustness2FeaturesEXT {
                 p_next,
                 null_descriptor: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -307,7 +306,7 @@ impl Context {
             vk::PhysicalDeviceSynchronization2Features {
                 p_next,
                 synchronization2: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -317,7 +316,7 @@ impl Context {
             vk::PhysicalDeviceScalarBlockLayoutFeatures {
                 p_next,
                 scalar_block_layout: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -327,7 +326,7 @@ impl Context {
             vk::PhysicalDeviceBufferDeviceAddressFeatures {
                 p_next,
                 buffer_device_address: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -342,7 +341,7 @@ impl Context {
                 descriptor_binding_storage_buffer_update_after_bind: true as _,
                 descriptor_binding_storage_image_update_after_bind: true as _,
                 descriptor_binding_sampled_image_update_after_bind: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -352,7 +351,7 @@ impl Context {
             vk::PhysicalDeviceDynamicRenderingFeatures {
                 p_next,
                 dynamic_rendering: true as _,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -367,7 +366,7 @@ impl Context {
                     shader_int64: true as _,
                     ..info.features.into()
                 },
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -381,7 +380,7 @@ impl Context {
                 queue_family_index,
                 queue_count,
                 p_queue_priorities,
-                ..default()
+                ..Default::default()
             }
         }];
 
@@ -408,7 +407,7 @@ impl Context {
                 pp_enabled_layer_names,
                 enabled_extension_count,
                 pp_enabled_extension_names,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -456,7 +455,7 @@ impl Context {
                 max_sets,
                 pool_size_count,
                 p_pool_sizes,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -472,7 +471,7 @@ impl Context {
                 stage_flags: vk::ShaderStageFlags::VERTEX
                     | vk::ShaderStageFlags::FRAGMENT
                     | vk::ShaderStageFlags::COMPUTE,
-                ..default()
+                ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
                 binding: 1,
@@ -481,7 +480,7 @@ impl Context {
                 stage_flags: vk::ShaderStageFlags::VERTEX
                     | vk::ShaderStageFlags::FRAGMENT
                     | vk::ShaderStageFlags::COMPUTE,
-                ..default()
+                ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
                 binding: SPECIAL_IMAGE_BINDING,
@@ -490,7 +489,7 @@ impl Context {
                 stage_flags: vk::ShaderStageFlags::VERTEX
                     | vk::ShaderStageFlags::FRAGMENT
                     | vk::ShaderStageFlags::COMPUTE,
-                ..default()
+                ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
                 binding: SPECIAL_BUFFER_BINDING,
@@ -499,7 +498,7 @@ impl Context {
                 stage_flags: vk::ShaderStageFlags::VERTEX
                     | vk::ShaderStageFlags::FRAGMENT
                     | vk::ShaderStageFlags::COMPUTE,
-                ..default()
+                ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
                 binding: DEVICE_ADDRESS_BUFFER_BINDING,
@@ -508,7 +507,7 @@ impl Context {
                 stage_flags: vk::ShaderStageFlags::VERTEX
                     | vk::ShaderStageFlags::FRAGMENT
                     | vk::ShaderStageFlags::COMPUTE,
-                ..default()
+                ..Default::default()
             },
         ];
 
@@ -524,7 +523,7 @@ impl Context {
             vk::DescriptorSetLayoutBindingFlagsCreateInfo {
                 binding_count,
                 p_binding_flags,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -542,7 +541,7 @@ impl Context {
                 flags,
                 binding_count,
                 p_bindings,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -562,7 +561,7 @@ impl Context {
                 descriptor_pool,
                 descriptor_set_count,
                 p_set_layouts,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -577,7 +576,7 @@ impl Context {
                 size: allocation_size as _,
                 usage: vk::BufferUsageFlags::TRANSFER_SRC,
                 sharing_mode: vk::SharingMode::EXCLUSIVE,
-                ..default()
+                ..Default::default()
             };
 
             unsafe { logical_device.create_buffer(&buffer_create_info, None) }
@@ -600,7 +599,7 @@ impl Context {
             let memory_allocate_info = vk::MemoryAllocateInfo {
                 allocation_size,
                 memory_type_index,
-                ..default()
+                ..Default::default()
             };
 
             unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
@@ -617,7 +616,7 @@ impl Context {
                 size: allocation_size as _,
                 usage: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
                 sharing_mode: vk::SharingMode::EXCLUSIVE,
-                ..default()
+                ..Default::default()
             };
 
             unsafe { logical_device.create_buffer(&buffer_create_info, None) }
@@ -640,7 +639,7 @@ impl Context {
             let memory_allocate_info = vk::MemoryAllocateInfo {
                 allocation_size,
                 memory_type_index,
-                ..default()
+                ..Default::default()
             };
 
             unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
@@ -655,7 +654,7 @@ impl Context {
         let command_pool_create_info = vk::CommandPoolCreateInfo {
             flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
             queue_family_index,
-            ..default()
+            ..Default::default()
         };
 
         let command_pool =

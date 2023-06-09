@@ -16,8 +16,6 @@ pub fn default_surface_format_selector(format: Format) -> usize {
     }
 }
 
-pub trait SurfaceFormatSelector = ops::Fn(Format) -> usize;
-
 #[derive(Debug, Clone, Copy)]
 pub enum PresentMode {
     DoNotWaitForVBlank,
@@ -43,7 +41,7 @@ pub struct SwapchainInfo<'a> {
     pub image_usage: ImageUsage,
     pub width: u32,
     pub height: u32,
-    pub surface_format_selector: &'a dyn SurfaceFormatSelector,
+    pub surface_format_selector: &'a dyn ops::Fn(Format) -> usize,
     pub old_swapchain: Option<Swapchain>,
     pub debug_name: &'a str,
 }

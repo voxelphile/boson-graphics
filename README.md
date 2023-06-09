@@ -15,7 +15,7 @@ A Vulkan abstraction layer that makes graphics easy and enjoyable.
 
 Have an idea? Let me know through an issue or PR.
 
-- Move away from nightly requirement (it is not necessary).
+- Create documentation.
 - Create examples.
 - Built-in error handling (no more having to use Vulkan Configuration / debug messaging)
 - Add all formats.

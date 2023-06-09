@@ -1,7 +1,5 @@
 use crate::prelude::*;
 
-use std::default::default;
-
 use ash::vk;
 
 use bitflags::bitflags;
@@ -63,7 +61,7 @@ pub struct ImageInfo<'a> {
 impl Default for ImageInfo<'_> {
     fn default() -> Self {
         Self {
-            extent: default(),
+            extent: Default::default(),
             usage: ImageUsage::empty(),
             format: Format::Undefined,
             debug_name: "",

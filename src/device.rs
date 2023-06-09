@@ -5,7 +5,6 @@ use crate::prelude::*;
 use crate::semaphore::InternalSemaphore;
 use crate::task::RenderGraphInfo;
 
-use std::default::default;
 use std::ffi;
 use std::marker;
 use std::mem;
@@ -46,8 +45,6 @@ pub fn default_device_selector(details: Details) -> usize {
 
     score
 }
-
-pub trait DeviceSelector = ops::Fn(Details) -> usize;
 
 pub(crate) struct DeviceResource<T, U: Into<u32> + From<u32> + Copy> {
     reprs: Vec<Option<T>>,
@@ -158,7 +155,7 @@ pub struct DeviceInner {
 pub struct DeviceInfo<'a> {
     pub display: RawDisplayHandle,
     pub window: RawWindowHandle,
-    pub selector: &'a dyn DeviceSelector,
+    pub selector: &'a dyn ops::Fn(Details) -> usize,
     pub features: Features,
     pub debug_name: &'a str,
 }
@@ -725,7 +722,7 @@ impl Device {
                 .get(buffer)
                 .ok_or(Error::InvalidResource)?
                 .buffer,
-            ..default()
+            ..Default::default()
         };
 
         Ok(BufferAddress(unsafe {
@@ -829,7 +826,7 @@ impl Device {
             tiling: vk::ImageTiling::OPTIMAL,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             samples: vk::SampleCountFlags::TYPE_1,
-            ..default()
+            ..Default::default()
         };
 
         let image = unsafe { logical_device.create_image(&image_create_info, None) }
@@ -852,7 +849,7 @@ impl Device {
             vk::MemoryAllocateInfo {
                 allocation_size,
                 memory_type_index,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -879,7 +876,7 @@ impl Device {
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            ..default()
+            ..Default::default()
         };
 
         let view =
@@ -952,7 +949,7 @@ impl Device {
             size,
             usage,
             sharing_mode,
-            ..default()
+            ..Default::default()
         };
 
         let buffer = unsafe { logical_device.create_buffer(&buffer_create_info, None) }
@@ -968,7 +965,7 @@ impl Device {
 
         let mut memory_allocate_flags_info = vk::MemoryAllocateFlagsInfo {
             flags: vk::MemoryAllocateFlags::DEVICE_ADDRESS,
-            ..default()
+            ..Default::default()
         };
 
         let memory_allocate_info = {
@@ -977,7 +974,7 @@ impl Device {
                 p_next,
                 allocation_size,
                 memory_type_index,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -1017,7 +1014,7 @@ impl Device {
         let mut semaphores = vec![];
 
         for i in 0..MAX_FRAMES_IN_FLIGHT {
-            let semaphore = unsafe { logical_device.create_semaphore(&default(), None) }
+            let semaphore = unsafe { logical_device.create_semaphore(&Default::default(), None) }
                 .map_err(|_| Error::Creation)?;
             semaphores.push(semaphore);
         }
@@ -1055,18 +1052,18 @@ impl Device {
         let semaphore_type_create_info = vk::SemaphoreTypeCreateInfo {
             initial_value,
             semaphore_type,
-            ..default()
+            ..Default::default()
         };
 
         let semaphore_create_info = vk::SemaphoreCreateInfo {
             p_next: &semaphore_type_create_info as *const _ as *const _,
-            ..default()
+            ..Default::default()
         };
 
         let mut semaphores = vec![];
 
         for i in 0..MAX_FRAMES_IN_FLIGHT {
-            let semaphore = unsafe { logical_device.create_semaphore(&default(), None) }
+            let semaphore = unsafe { logical_device.create_semaphore(&Default::default(), None) }
                 .map_err(|_| Error::Creation)?;
             semaphores.push(semaphore);
         }
@@ -1307,7 +1304,7 @@ impl Device {
                         base_array_layer: 0,
                         layer_count: 1,
                     },
-                    ..default()
+                    ..Default::default()
                 };
 
                 let image_view =

@@ -42,7 +42,7 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
 name = "boson"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "ash",
  "ash-window",

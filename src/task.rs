@@ -6,7 +6,6 @@ use crate::prelude::*;
 
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
-use std::default::default;
 use std::marker::PhantomData;
 use std::ops;
 use std::slice;
@@ -57,7 +56,7 @@ impl<'a, T> RenderGraphBuilder<'a, T> {
 
         self.nodes.push(Node {
             resources,
-            task: box task,
+            task: Box::new(task),
         });
     }
 
@@ -82,7 +81,7 @@ impl<'a, T> RenderGraphBuilder<'a, T> {
             command_pool: *command_pool,
             level: vk::CommandBufferLevel::PRIMARY,
             command_buffer_count: MAX_FRAMES_IN_FLIGHT as _,
-            ..default()
+            ..Default::default()
         };
 
         let command_buffers =
@@ -91,7 +90,7 @@ impl<'a, T> RenderGraphBuilder<'a, T> {
 
         let fence_create_info = vk::FenceCreateInfo {
             flags: vk::FenceCreateFlags::SIGNALED,
-            ..default()
+            ..Default::default()
         };
 
         let mut fences = vec![];
@@ -155,10 +154,9 @@ impl<T> RenderGraph<'_, T> {
     }
 }
 
-impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
-    extern "rust-call" fn call_mut(&mut self, args: (&mut T,)) {
+impl<T> RenderGraph<'_, T> {
+    fn render(&mut self, home: &mut T) {
         profiling::scope!("RenderGraph", "ev");
-        let (home,) = args;
 
         let RenderGraphInner {
             device,
@@ -220,7 +218,8 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
         }
 
         unsafe {
-            logical_device.begin_command_buffer(command_buffers[current_frame], &default());
+            logical_device
+                .begin_command_buffer(command_buffers[current_frame], &Default::default());
         }
 
         {
@@ -237,7 +236,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                 if let Some(internal_buffer) = resources.buffers.get((i as u32).into()) {
                     let buffer_device_address_info = vk::BufferDeviceAddressInfo {
                         buffer: internal_buffer.buffer,
-                        ..default()
+                        ..Default::default()
                     };
 
                     addresses[i] = unsafe {
@@ -254,7 +253,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                         buffer: vk::Buffer::null(),
                         offset: 0,
                         range: vk::WHOLE_SIZE,
-                        ..default()
+                        ..Default::default()
                     });
                 }
             }
@@ -262,21 +261,27 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
             for i in 0..resources.images.count() as usize {
                 if let Some(internal_image) = resources.images.get((i as u32).into()) {
                     if internal_image.get_format().is_depth_or_stencil() {
-                        descriptor_image_infos.push(vk::DescriptorImageInfo { ..default() });
+                        descriptor_image_infos.push(vk::DescriptorImageInfo {
+                            ..Default::default()
+                        });
                         continue;
                     }
                     if let InternalImage::Swapchain { .. } = internal_image {
-                        descriptor_image_infos.push(vk::DescriptorImageInfo { ..default() });
+                        descriptor_image_infos.push(vk::DescriptorImageInfo {
+                            ..Default::default()
+                        });
                         continue;
                     }
 
                     descriptor_image_infos.push(vk::DescriptorImageInfo {
                         image_view: internal_image.get_image_view(),
                         image_layout: vk::ImageLayout::GENERAL,
-                        ..default()
+                        ..Default::default()
                     });
                 } else {
-                    descriptor_image_infos.push(vk::DescriptorImageInfo { ..default() });
+                    descriptor_image_infos.push(vk::DescriptorImageInfo {
+                        ..Default::default()
+                    });
                 }
             }
 
@@ -333,7 +338,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                     descriptor_count: 1,
                     descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
                     p_buffer_info,
-                    ..default()
+                    ..Default::default()
                 }
             });
 
@@ -347,7 +352,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                         descriptor_count: descriptor_buffer_infos.len() as _,
                         descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
                         p_buffer_info,
-                        ..default()
+                        ..Default::default()
                     }
                 });
             }
@@ -362,7 +367,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                         descriptor_count: descriptor_image_infos.len() as _,
                         descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
                         p_image_info,
-                        ..default()
+                        ..Default::default()
                     }
                 });
             }
@@ -514,7 +519,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                     p_signal_semaphores,
                     command_buffer_count,
                     p_command_buffers,
-                    ..default()
+                    ..Default::default()
                 }
             };
 
@@ -555,7 +560,7 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
                     swapchain_count,
                     p_swapchains,
                     p_image_indices,
-                    ..default()
+                    ..Default::default()
                 }
             };
 
@@ -578,14 +583,6 @@ impl<T> ops::FnMut<(&mut T,)> for RenderGraph<'_, T> {
 
             drop(resources);
         }
-    }
-}
-
-impl<T> ops::FnOnce<(&mut T,)> for RenderGraph<'_, T> {
-    type Output = ();
-
-    extern "rust-call" fn call_once(mut self, args: (&mut T,)) {
-        self.call_mut(args)
     }
 }
 

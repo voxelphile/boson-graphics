@@ -2,7 +2,6 @@ use crate::device::DeviceInner;
 use crate::pipeline::{PipelineInner, PipelineModify};
 use crate::prelude::*;
 
-use std::default::default;
 use std::mem;
 use std::ops;
 use std::ptr;
@@ -274,8 +273,8 @@ impl Default for Attachment {
     fn default() -> Self {
         Self {
             image: usize::MAX,
-            load_op: default(),
-            clear: default(),
+            load_op: Default::default(),
+            clear: Default::default(),
         }
     }
 }
@@ -629,7 +628,7 @@ impl Commands<'_> {
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            ..default()
+            ..Default::default()
         }];
 
         unsafe {
@@ -715,7 +714,7 @@ impl Commands<'_> {
                 base_array_layer: 0,
                 layer_count: 1,
             },
-            ..default()
+            ..Default::default()
         }];
 
         unsafe {
@@ -754,7 +753,7 @@ impl Commands<'_> {
 
         let resources = resources.lock().unwrap();
 
-        let mut color_rendering_attachment_infos = vec![default(); color.len()];
+        let mut color_rendering_attachment_infos = vec![Default::default(); color.len()];
 
         for (i, color) in color.iter().enumerate() {
             let Qualifier::Image(color_handle, _, _) = qualifiers.get(color.image).ok_or(Error::InvalidResource)? else {
@@ -783,7 +782,7 @@ impl Commands<'_> {
                 load_op: color.load_op.into(),
                 store_op: vk::AttachmentStoreOp::STORE,
                 clear_value,
-                ..default()
+                ..Default::default()
             };
         }
 
@@ -820,7 +819,7 @@ impl Commands<'_> {
                 load_op: depth.load_op.into(),
                 store_op: vk::AttachmentStoreOp::STORE,
                 clear_value,
-                ..default()
+                ..Default::default()
             })
         } else {
             None
@@ -863,7 +862,7 @@ impl Commands<'_> {
                 p_color_attachments,
                 p_depth_attachment,
                 p_stencil_attachment,
-                ..default()
+                ..Default::default()
             }
         };
 
@@ -1073,7 +1072,7 @@ impl Commands<'_> {
                         old_layout,
                         new_layout,
                         subresource_range,
-                        ..default()
+                        ..Default::default()
                     });
                 }
                 Barrier::Buffer {
@@ -1107,7 +1106,7 @@ impl Commands<'_> {
                         offset,
                         src_access_mask,
                         dst_access_mask,
-                        ..default()
+                        ..Default::default()
                     });
                 }
             }
@@ -1118,7 +1117,7 @@ impl Commands<'_> {
                 **command_buffer,
                 src_stage.into(),
                 dst_stage.into(),
-                default(),
+                Default::default(),
                 &memory_barriers,
                 &buffer_barriers,
                 &image_barriers,

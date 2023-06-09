@@ -1,11 +1,3 @@
-#![feature(default_free_fn)]
-#![feature(exit_status_error)]
-#![feature(trait_alias)]
-#![feature(let_else)]
-#![feature(box_syntax)]
-#![feature(unboxed_closures)]
-#![feature(fn_traits)]
-
 mod buffer;
 mod commands;
 mod context;
@@ -33,7 +25,7 @@ pub mod prelude {
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};
     pub(crate) use crate::device::DeviceResources;
-    pub use crate::device::{Device, DeviceInfo, DeviceSelector, Features};
+    pub use crate::device::{Device, DeviceInfo, Features};
     pub use crate::format::Format;
     pub(crate) use crate::image::InternalImage;
     pub use crate::image::{Image, ImageAspect, ImageExtent, ImageInfo, ImageLayout, ImageUsage};
@@ -49,9 +41,7 @@ pub mod prelude {
         BinarySemaphore, BinarySemaphoreInfo, TimelineSemaphore, TimelineSemaphoreInfo,
     };
     pub(crate) use crate::swapchain::InternalSwapchain;
-    pub use crate::swapchain::{
-        Acquire, PresentMode, SurfaceFormatSelector, Swapchain, SwapchainInfo,
-    };
+    pub use crate::swapchain::{Acquire, PresentMode, Swapchain, SwapchainInfo};
     pub(crate) use crate::task::Qualifier;
     pub use crate::task::{
         BufferAccess, ImageAccess, Present, RenderGraph, RenderGraphBuilder, Resource, Submit, Task,
