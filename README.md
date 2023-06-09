@@ -17,11 +17,13 @@ Have an idea? Let me know through an issue or PR.
 
 - Create documentation.
 - Create examples.
-- Built-in error handling (no more having to use Vulkan Configuration / debug messaging)
+- Add debug naming of resources for RenderDoc.
+- Conditional render graph tasks.
+- Built-in error handling. (no more having to use Vulkan Configuration / debug messaging)
 - Add all formats.
 - Add hardware raytracing support.
 - Better glslang integration. (stop using Vulkan SDK through shell process and instead integrate through bindings)
-- Custom compiler traits and more shader language support (HLSL)?
+- Custom compiler traits and more shader language support? (HLSL)
 
 ## Design Philosophy
 
