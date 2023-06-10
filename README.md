@@ -29,7 +29,7 @@ This library is under constant development so that it can meet any requirements.
 - [ ] Render graph optimization: There is still more work to do to make this as fast as possible.
 - [ ] Full Vulkan support: I want this library to allow you to do anything Vulkan offers, so if something is not present, submit an issue or PR.
 
-## Your first triangle
+## Your first triangle (click the image!)
 
 [![Watch the video](https://img.youtube.com/vi/BlCp4RUuC4I/maxresdefault.jpg)](https://youtu.be/BlCp4RUuC4I)
 
