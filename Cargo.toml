@@ -6,6 +6,7 @@ description = "A vulkan abstraction layer."
 license = "MIT"
 keywords = ["graphics", "vulkan"]
 repository = "https://github.com/voxelphile/boson"
+authors = ["Voxelphile", "Rustaceans like you!"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
