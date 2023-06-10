@@ -1,5 +1,3 @@
-# Boson
-
 A Vulkan abstraction layer that makes graphics easy and enjoyable.
 
 ## Design Philosophy
@@ -45,6 +43,4 @@ Have an idea? Let me know through an issue or PR.
 - Built-in error handling. (no more having to use Vulkan Configuration / debug messaging)
 - Add all formats.
 - Add hardware raytracing support.
-- Better glslang integration. (stop using Vulkan SDK through shell process and instead integrate through bindings)
-- Custom compiler traits and more shader language support? (HLSL)
 - Remove pub(crate) items from the prelude.
