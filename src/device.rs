@@ -1344,13 +1344,12 @@ impl Device {
         }))
     }
 
-    pub fn create_pipeline_compiler(&self, info: PipelineCompilerInfo<'_>) -> PipelineCompiler {
+    pub fn create_pipeline_compiler(&self, info: PipelineCompilerInfo) -> PipelineCompiler {
         PipelineCompiler {
             inner: Arc::new(PipelineCompilerInner {
                 device: self.inner.clone(),
+                include_dir: info.include_dir,
                 compiler: info.compiler,
-                source_path: info.source_path.to_path_buf(),
-                asset_path: info.asset_path.to_path_buf(),
                 debug_name: info.debug_name.to_owned(),
             }),
         }

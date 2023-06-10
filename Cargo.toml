@@ -1,6 +1,6 @@
 [package]
 name = "boson"
-version = "0.12.3"
+version = "0.13.0"
 edition = "2021"
 description = "A vulkan abstraction layer."
 license = "MIT"
@@ -18,6 +18,7 @@ raw-window-handle = "0.5.0"
 bitflags = "2.1.0"
 lazy_static = "1.4.0"
 profiling = "1.0.8"
+shaderc = "0.8.2"
 
 [workspace]
 members = ["./", "examples/*"]

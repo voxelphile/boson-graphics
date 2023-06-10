@@ -6,7 +6,10 @@ use std::env;
 use std::ffi;
 use std::fmt;
 use std::fs;
+use std::io::Write;
 use std::path;
+use std::path::Path;
+use std::path::PathBuf;
 use std::process;
 use std::sync::{Arc, Mutex};
 
@@ -15,16 +18,25 @@ use ash::vk;
 use bitflags::bitflags;
 
 use lazy_static::lazy_static;
+use shaderc::ResolvedInclude;
 
 pub type Spv = Vec<u32>;
 
 ///Requires a name, a type, and the includes
-#[derive(Clone, Copy)]
-pub struct Shader<'a>(pub ShaderType, pub &'a str, pub &'a [&'a str]);
+#[derive(Clone)]
+pub struct Shader {
+    pub ty: ShaderType,
+    pub source: String,
+    pub defines: Vec<Define>,
+}
 
-impl Default for Shader<'_> {
+impl Default for Shader {
     fn default() -> Self {
-        Self(ShaderType::Vertex, "", &[])
+        Self {
+            ty: ShaderType::Vertex,
+            source: String::new(),
+            defines: vec![],
+        }
     }
 }
 #[derive(Clone, Copy, Default)]
@@ -71,156 +83,84 @@ pub struct ShaderCompilerInfo {
 }
 
 pub struct ShaderCompilationOptions<'a> {
-    source_path: &'a path::Path,
-    input_path: &'a path::Path,
-    output_path: &'a path::Path,
+    include_dir: &'a Path,
+    source: &'a String,
     ty: ShaderType,
-    defines: &'a [&'a str],
+    defines: &'a [Define],
 }
 
-pub enum ShaderCompiler {
-    None,
-    Glslc { language: ShaderLanguage },
-    Dxc { language: ShaderLanguage },
+#[derive(Clone)]
+pub struct Define {
+    name: String,
+    value: String,
 }
 
-impl Default for ShaderCompiler {
-    fn default() -> Self {
-        Self::None
-    }
+pub trait ShaderCompiler {
+    fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv>;
 }
 
-impl ShaderCompiler {
-    pub fn glslc(info: ShaderCompilerInfo) -> Self {
-        let ShaderCompilerInfo { language } = info;
+pub struct Shaderc {
+    compiler: shaderc::Compiler,
+}
 
-        ShaderCompiler::Glslc { language }
-    }
-
-    pub fn dxc(info: ShaderCompilerInfo) -> Self {
-        let ShaderCompilerInfo { language } = info;
-
-        ShaderCompiler::Dxc { language }
-    }
-
-    pub(crate) fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv> {
-        let vulkan_path = env::var("VULKAN_SDK").map_err(|e| Error::ShaderCompilerNotFound)?;
-
-        match self {
-            ShaderCompiler::None => Ok(fs::read(options.output_path)
-                .expect("failed to read shader compilation output")
-                .chunks(4)
-                .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
-                .collect::<Vec<_>>()),
-            ShaderCompiler::Glslc { language } => {
-                let glslc_path = path::PathBuf::from(vulkan_path);
-
-                let source_code = fs::read_to_string(options.input_path).map_err(|_| {
-                    Error::ShaderCompilationError {
-                        message: format!("failed to read shader: {}", options.input_path.display()),
-                    }
-                })?;
-
-                let mut temporary_path = options.input_path.to_path_buf();
-
-                temporary_path.pop();
-                temporary_path.push(&format!(
-                    "{}",
-                    options.input_path.file_stem().unwrap().to_string_lossy()
-                ));
-
-                fs::remove_file(temporary_path.clone());
-
-                let mut modified_code = source_code.clone();
-
-                modified_code =
-                    modified_code.replacen("\n", &format!("\n#define {}\r\n", options.ty), 1);
-
-                for define in options.defines {
-                    modified_code =
-                        modified_code.replacen("\n", &format!("\n#define {}\r\n", define), 1);
-                }
-
-                fs::write(temporary_path.clone(), modified_code);
-
-                let glslc = process::Command::new("glslc")
-                    .current_dir(glslc_path)
-                    .arg("-g")
-                    .arg(format!("-fshader-stage={}", options.ty))
-                    .arg("--target-env=vulkan1.3")
-                    .arg("-O")
-                    .arg("-I")
-                    .arg(&options.source_path)
-                    .arg("-c")
-                    .arg(&temporary_path)
-                    .arg("-o")
-                    .arg(&options.output_path)
-                    .spawn()
-                    .map_err(|e| {
-                        dbg!(e);
-                        Error::ShaderCompilationError {
-                            message: String::from("failed to spawn glslc"),
-                        }
-                    })?;
-
-                let glslc =
-                    glslc
-                        .wait_with_output()
-                        .map_err(|_| Error::ShaderCompilationError {
-                            message: String::from("failed to wait on glslc"),
-                        })?;
-
-                let spv = fs::read(options.output_path)
-                    .expect(
-                        "failed to read shader compilation output. it may have failed to compile.",
-                    )
-                    .chunks(4)
-                    .map(|a| u32::from_le_bytes(a.try_into().unwrap()))
-                    .collect::<Vec<_>>();
-
-                fs::remove_file(temporary_path).expect("failed to remove temporary file.");
-
-                Ok(spv)
-            }
-            _ => todo!(),
+impl Shaderc {
+    fn new() -> Self {
+        Self {
+            compiler: shaderc::Compiler::new().unwrap(),
         }
     }
+}
 
-    pub(crate) fn language(&self) -> Option<ShaderLanguage> {
-        Some(match self {
-            Self::None => None?,
-            Self::Glslc { language } => *language,
-            Self::Dxc { language } => *language,
-        })
+impl ShaderCompiler for Shaderc {
+    fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv> {
+        let mut additional_options = shaderc::CompileOptions::new().unwrap();
+
+        for Define { name, value } in options.defines {
+            additional_options.add_macro_definition(name, Some(value));
+        }
+
+        additional_options.add_macro_definition(&options.ty.to_string(), None);
+
+        let include_dir = options.include_dir.to_owned();
+        additional_options.set_include_callback(move |name, _, _, _| {
+            let mut file_path = include_dir.clone();
+            file_path.push(name);
+            Ok(ResolvedInclude {
+                resolved_name: name.to_owned(),
+                content: fs::read_to_string(file_path).map_err(|_| "Couldn't find file.")?,
+            })
+        });
+
+        let binary_result = self
+            .compiler
+            .compile_into_spirv(
+                options.source,
+                match options.ty {
+                    ShaderType::Vertex => shaderc::ShaderKind::Vertex,
+                    ShaderType::Fragment => shaderc::ShaderKind::Fragment,
+                    ShaderType::Compute => shaderc::ShaderKind::Compute,
+                },
+                "shader.glsl",
+                "main",
+                Some(&additional_options),
+            )
+            .unwrap();
+        Ok(binary_result.as_binary().to_vec())
     }
-
-    pub(crate) fn extension(&self) -> Option<&'static str> {
-        Some(match self.language()? {
-            ShaderLanguage::Glsl => "glsl",
-            ShaderLanguage::Hlsl => "hlsl",
-        })
-    }
 }
 
-lazy_static! {
-    static ref CURRENT_PATH: path::PathBuf =
-        env::current_dir().expect("failed to get current directory");
+pub struct PipelineCompilerInfo {
+    pub compiler: Box<dyn ShaderCompiler>,
+    pub include_dir: PathBuf,
+    pub debug_name: String,
 }
 
-pub struct PipelineCompilerInfo<'a> {
-    pub compiler: ShaderCompiler,
-    pub source_path: &'a path::Path,
-    pub asset_path: &'a path::Path,
-    pub debug_name: &'a str,
-}
-
-impl Default for PipelineCompilerInfo<'_> {
+impl Default for PipelineCompilerInfo {
     fn default() -> Self {
         Self {
-            compiler: Default::default(),
-            source_path: &CURRENT_PATH,
-            asset_path: &CURRENT_PATH,
-            debug_name: "PipelineCompiler",
+            compiler: Box::new(Shaderc::new()),
+            include_dir: env::current_dir().unwrap(),
+            debug_name: "PipelineCompiler".to_string(),
         }
     }
 }
@@ -231,17 +171,13 @@ pub struct PipelineCompiler {
 
 pub struct PipelineCompilerInner {
     pub(crate) device: Arc<DeviceInner>,
-    pub(crate) compiler: ShaderCompiler,
-    pub(crate) source_path: path::PathBuf,
-    pub(crate) asset_path: path::PathBuf,
+    pub(crate) compiler: Box<dyn ShaderCompiler>,
+    pub(crate) include_dir: PathBuf,
     pub(crate) debug_name: String,
 }
 
 impl PipelineCompiler {
-    pub fn create_graphics_pipeline<'a, 'b: 'a, const S: usize, const C: usize>(
-        &'a self,
-        info: GraphicsPipelineInfo<'b, S, C>,
-    ) -> Result<Pipeline<'b, S, C>> {
+    pub fn create_graphics_pipeline<'a>(&'a self, info: GraphicsPipelineInfo) -> Result<Pipeline> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
         let DeviceInner {
@@ -253,50 +189,41 @@ impl PipelineCompiler {
         let shader_data = info
             .shaders
             .iter()
-            .map(|Shader(ty, name, defines)| {
-                let extension = self.inner.compiler.extension().unwrap_or("");
+            .map(
+                |Shader {
+                     ty,
+                     source,
+                     defines,
+                 }| {
+                    let spv = self
+                        .inner
+                        .compiler
+                        .compile_to_spv(ShaderCompilationOptions {
+                            include_dir: &self.inner.include_dir,
+                            source,
+                            ty: *ty,
+                            defines,
+                        })?;
 
-                let mut input_path = self.inner.source_path.clone();
+                    let shader_module_create_info = {
+                        let code_size = 4 * spv.len();
 
-                input_path.push(name);
-                input_path.set_extension(extension);
+                        let p_code = spv.as_ptr();
 
-                let mut output_path = self.inner.asset_path.clone();
+                        vk::ShaderModuleCreateInfo {
+                            code_size,
+                            p_code,
+                            ..Default::default()
+                        }
+                    };
 
-                let short_ty = format!("{}", ty).chars().take(4).collect::<String>();
-
-                output_path.push(name);
-                output_path.set_extension(format!("{}.spv", &short_ty));
-
-                let spv = self
-                    .inner
-                    .compiler
-                    .compile_to_spv(ShaderCompilationOptions {
-                        source_path: &self.inner.source_path.clone(),
-                        input_path: &input_path,
-                        output_path: &output_path,
-                        ty: *ty,
-                        defines: *defines,
-                    })?;
-
-                let shader_module_create_info = {
-                    let code_size = 4 * spv.len();
-
-                    let p_code = spv.as_ptr();
-
-                    vk::ShaderModuleCreateInfo {
-                        code_size,
-                        p_code,
-                        ..Default::default()
-                    }
-                };
-
-                unsafe { logical_device.create_shader_module(&shader_module_create_info, None) }
-                    .map(|module| (ty, module))
-                    .map_err(|_| Error::ShaderCompilationError {
-                        message: String::from("Failed to create shader module"),
-                    })
-            })
+                    unsafe { logical_device.create_shader_module(&shader_module_create_info, None) }
+                        .map(|module| (ty, module))
+                        .map_err(|_| Error::ShaderCompilationError {
+                            message: String::from("Failed to create shader module"),
+                        })
+                },
+            )
             .collect::<Vec<_>>();
 
         let shader_data = {
@@ -525,10 +452,7 @@ impl PipelineCompiler {
         })
     }
 
-    pub fn create_compute_pipeline<'a, 'b: 'a>(
-        &'a self,
-        info: ComputePipelineInfo<'b>,
-    ) -> Result<Pipeline<'b, 1, 0>> {
+    pub fn create_compute_pipeline<'a>(&'a self, info: ComputePipelineInfo) -> Result<Pipeline> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
         let DeviceInner {
@@ -537,32 +461,23 @@ impl PipelineCompiler {
             ..
         } = &**device;
 
+        let spec = Spec::Compute(info.clone());
+
         let module = {
-            let Shader(ty, name, defines) = info.shader;
-
-            let extension = self.inner.compiler.extension().unwrap_or("");
-
-            let mut input_path = self.inner.source_path.clone();
-
-            input_path.push(name);
-            input_path.set_extension(extension);
-
-            let mut output_path = self.inner.asset_path.clone();
-
-            let short_ty = format!("{}", ty).chars().take(4).collect::<String>();
-
-            output_path.push(name);
-            output_path.set_extension(format!("{}.spv", &short_ty));
+            let Shader {
+                ty,
+                source,
+                defines,
+            } = info.shader;
 
             let spv = self
                 .inner
                 .compiler
                 .compile_to_spv(ShaderCompilationOptions {
-                    source_path: &self.inner.source_path.clone(),
-                    input_path: &input_path,
-                    output_path: &output_path,
+                    include_dir: &self.inner.include_dir,
+                    source: &source,
                     ty,
-                    defines,
+                    defines: &defines,
                 })?;
 
             let shader_module_create_info = {
@@ -586,7 +501,7 @@ impl PipelineCompiler {
         let name = ffi::CString::new("main").unwrap();
 
         let stage = {
-            let Shader(ty, _, _) = info.shader;
+            let Shader { ty, .. } = info.shader;
 
             let stage = ty.into();
 
@@ -646,8 +561,6 @@ impl PipelineCompiler {
         }
         .map_err(|_| Error::Creation)?[0];
 
-        let spec = Spec::Compute(info);
-
         let modify = Mutex::new(PipelineModify { pipeline, layout });
 
         Ok(Pipeline {
@@ -660,11 +573,8 @@ impl PipelineCompiler {
         })
     }
 
-    pub fn refresh_graphics_pipeline<'a, 'b: 'a, const S: usize, const C: usize>(
-        &'a self,
-        pipeline: &'a Pipeline<'b, S, C>,
-    ) -> Result<()> {
-        let Spec::Graphics(info) = pipeline.inner.spec else {
+    pub fn refresh_graphics_pipeline<'a>(&'a self, pipeline: &'a Pipeline) -> Result<()> {
+        let Spec::Graphics(info) = pipeline.inner.spec.clone() else {
             Err(Error::InvalidResource)?
         };
 
@@ -679,11 +589,8 @@ impl PipelineCompiler {
         Ok(())
     }
 
-    pub fn refresh_compute_pipeline<'a, 'b: 'a>(
-        &'a self,
-        pipeline: &'a Pipeline<'b, 1, 0>,
-    ) -> Result<()> {
-        let Spec::Compute(info) = pipeline.inner.spec else {
+    pub fn refresh_compute_pipeline<'a>(&'a self, pipeline: &'a Pipeline) -> Result<()> {
+        let Spec::Compute(info) = pipeline.inner.spec.clone() else {
             Err(Error::InvalidResource)?
         };
 
@@ -1084,44 +991,47 @@ impl From<OptionalDepthStencil> for vk::PipelineDepthStencilStateCreateInfo {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct GraphicsPipelineInfo<'a, const S: usize, const C: usize> {
-    pub shaders: [Shader<'a>; S],
-    pub color: [Color; C],
+#[derive(Clone)]
+pub struct GraphicsPipelineInfo {
+    pub shaders: Vec<Shader>,
+    pub color: Vec<Color>,
     pub depth: Option<Depth>,
     pub stencil: Option<Stencil>,
     pub raster: Raster,
     pub push_constant_size: usize,
-    pub debug_name: &'a str,
+    pub debug_name: String,
 }
 
-impl<const S: usize, const C: usize> Default for GraphicsPipelineInfo<'_, S, C> {
+impl Default for GraphicsPipelineInfo {
     fn default() -> Self {
         Self {
-            shaders: [Default::default(); S],
-            color: [Default::default(); C],
+            shaders: vec![Default::default()],
+            color: vec![],
             depth: None,
             stencil: None,
             raster: Default::default(),
             push_constant_size: 128,
-            debug_name: "Pipeline",
+            debug_name: String::from("Pipeline"),
         }
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ComputePipelineInfo<'a> {
-    pub shader: Shader<'a>,
+#[derive(Clone)]
+pub struct ComputePipelineInfo {
+    pub shader: Shader,
     pub push_constant_size: usize,
-    pub debug_name: &'a str,
+    pub debug_name: String,
 }
 
-impl Default for ComputePipelineInfo<'_> {
+impl Default for ComputePipelineInfo {
     fn default() -> Self {
         Self {
-            shader: Shader(ShaderType::Compute, "default", &[]),
+            shader: Shader {
+                ty: ShaderType::Compute,
+                ..Default::default()
+            },
             push_constant_size: 128,
-            debug_name: "Pipeline",
+            debug_name: String::from("Pipeline"),
         }
     }
 }
@@ -1219,21 +1129,21 @@ impl From<PipelineBindPoint> for vk::PipelineBindPoint {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum Spec<'a, const S: usize, const C: usize> {
-    Graphics(GraphicsPipelineInfo<'a, S, C>),
-    Compute(ComputePipelineInfo<'a>),
+#[derive(Clone)]
+pub(crate) enum Spec {
+    Graphics(GraphicsPipelineInfo),
+    Compute(ComputePipelineInfo),
 }
 
-pub struct Pipeline<'a, const S: usize, const C: usize> {
-    pub(crate) inner: Arc<PipelineInner<'a, S, C>>,
+pub struct Pipeline {
+    pub(crate) inner: Arc<PipelineInner>,
 }
 
-pub struct PipelineInner<'a, const S: usize, const C: usize> {
+pub struct PipelineInner {
     pub(crate) compiler: Arc<PipelineCompilerInner>,
     pub(crate) modify: Mutex<PipelineModify>,
     pub(crate) bind_point: PipelineBindPoint,
-    pub(crate) spec: Spec<'a, S, C>,
+    pub(crate) spec: Spec,
 }
 
 #[derive(Clone, Copy)]

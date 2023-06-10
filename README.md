@@ -23,7 +23,7 @@ This library is under constant development so that it can meet any requirements.
 ## Features
 
 - [x] Simplified API surface: No more 1000 LOC to draw a triangle (takes about 300-500).
-- [x] Shader hot reloading.
+- [x] Shader hot reloading. 
 - [x] Bindless shader resource model.
 - [x] Render graph implementation: featuring resource tracking and automatic synchronization.
 - [ ] Render graph optimization: There is still more work to do to make this as fast as possible.

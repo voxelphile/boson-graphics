@@ -32,8 +32,8 @@ pub mod prelude {
     pub(crate) use crate::memory::InternalMemory;
     pub use crate::memory::Memory;
     pub use crate::pipeline::{
-        Blend, BlendFactor, BlendOp, Color, ColorComponent, CompareOp, ComputePipelineInfo, Depth,
-        FaceCull, FrontFace, GraphicsPipelineInfo, Pipeline, PipelineCompiler,
+        Blend, BlendFactor, BlendOp, Color, ColorComponent, CompareOp, ComputePipelineInfo, Define,
+        Depth, FaceCull, FrontFace, GraphicsPipelineInfo, Pipeline, PipelineCompiler,
         PipelineCompilerInfo, PipelineStage, PolygonMode, Raster, Shader, ShaderCompiler,
         ShaderType, Stencil, StencilOp, StencilState,
     };

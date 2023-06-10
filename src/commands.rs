@@ -156,9 +156,9 @@ pub struct PipelineBarrier {
     pub barriers: Vec<Barrier>,
 }
 
-pub struct PushConstant<'a, T: Copy, const S: usize, const C: usize> {
+pub struct PushConstant<'a, T> {
     pub data: T,
-    pub pipeline: &'a Pipeline<'a, S, C>,
+    pub pipeline: &'a Pipeline,
 }
 
 pub struct BindIndexBuffer {
@@ -312,10 +312,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    pub fn push_constant<'a, T: Copy, const S: usize, const C: usize>(
-        &mut self,
-        push_constant: PushConstant<'a, T, S, C>,
-    ) -> Result<()> {
+    pub fn push_constant<'a, T: Copy>(&mut self, push_constant: PushConstant<'a, T>) -> Result<()> {
         let Commands {
             device,
             command_buffer,
@@ -889,10 +886,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    pub fn set_pipeline<'a, const S: usize, const C: usize>(
-        &mut self,
-        pipeline: &'a Pipeline<'a, S, C>,
-    ) -> Result<()> {
+    pub fn set_pipeline(&mut self, pipeline: &Pipeline) -> Result<()> {
         let Commands {
             device,
             command_buffer,

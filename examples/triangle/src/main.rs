@@ -1,3 +1,5 @@
+use std::fs;
+
 //Comes with a prelude so you do not have to import individual types.
 use boson::prelude::*;
 
@@ -82,10 +84,7 @@ fn main() {
     //By default, it choses no underlying compiler
     //(you'd want this if your shipping spirv and a binary to someone without the Vulkan SDK)
     //Source and asset directory defaults to the current working directory.
-    let pipeline_compiler = device.create_pipeline_compiler(PipelineCompilerInfo {
-        compiler: ShaderCompiler::glslc(Default::default()),
-        ..Default::default()
-    });
+    let pipeline_compiler = device.create_pipeline_compiler(Default::default());
 
     //Right now this uses lifetimes and const generics which is really annoying, so you'll probably want to use a static string reference
     //for your shader names (shader names convert into path for that shader)
@@ -94,19 +93,19 @@ fn main() {
             //By default, boson will inject `#define the_shader_type_in_lowercase`
             //for example, the first shader will have `#define vertex` added to the top of the file before compilation
             //and the second shader will have `#define fragment`
-            shaders: [
-                Shader(
-                    ShaderType::Vertex, //shader type
-                    "triangle",         //shader name/path
-                    &[],                //custom defines
-                ),
-                Shader(
-                    ShaderType::Fragment, //shader type
-                    "triangle",           //shader name/path
-                    &[],                  //custom defines
-                ),
+            shaders: vec![
+                Shader{
+                    ty: ShaderType::Vertex,
+                    source: fs::read_to_string("./triangle.glsl").unwrap(),
+                    defines: vec![]
+                },
+                Shader{
+                    ty: ShaderType::Fragment,
+                    source: fs::read_to_string("./triangle.glsl").unwrap(),
+                    defines: vec![]
+                },
             ],
-            color: [Color {
+            color: vec![Color {
                 format: device
                     .presentation_format(
                         swapchain.expect("should have been set in the initial resize"),
@@ -170,7 +169,7 @@ fn main() {
         time_buffer: Buffer,
         //This is the render pipeline we previously defined
         //TODO: I want to remove the lifetime and const generics.
-        render_pipeline: Pipeline<'static, 2, 1>,
+        render_pipeline: Pipeline,
         //This is what you will send to the shader, either through a buffer or push constant,
         //that lets the shader know where in memory your buffer is.
         time_buffer_address: BufferAddress,
