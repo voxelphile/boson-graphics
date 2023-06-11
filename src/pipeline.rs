@@ -573,10 +573,16 @@ impl PipelineCompiler {
         })
     }
 
-    pub fn refresh_graphics_pipeline<'a>(&'a self, pipeline: &'a Pipeline) -> Result<()> {
-        let Spec::Graphics(info) = pipeline.inner.spec.clone() else {
+    pub fn refresh_graphics_pipeline<'a>(
+        &'a self,
+        pipeline: &'a Pipeline,
+        shaders: Vec<Shader>,
+    ) -> Result<()> {
+        let Spec::Graphics(mut info) = pipeline.inner.spec.clone() else {
             Err(Error::InvalidResource)?
         };
+
+        info.shaders = shaders;
 
         let new_pipeline = self.create_graphics_pipeline(info).unwrap();
 
@@ -589,10 +595,16 @@ impl PipelineCompiler {
         Ok(())
     }
 
-    pub fn refresh_compute_pipeline<'a>(&'a self, pipeline: &'a Pipeline) -> Result<()> {
-        let Spec::Compute(info) = pipeline.inner.spec.clone() else {
+    pub fn refresh_compute_pipeline<'a>(
+        &'a self,
+        pipeline: &'a Pipeline,
+        shader: Shader,
+    ) -> Result<()> {
+        let Spec::Compute(mut info) = pipeline.inner.spec.clone() else {
             Err(Error::InvalidResource)?
         };
+
+        info.shader = shader;
 
         let new_pipeline = self.create_compute_pipeline(info).unwrap();
 

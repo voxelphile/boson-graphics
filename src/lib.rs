@@ -47,7 +47,7 @@ pub mod prelude {
         BufferAccess, ImageAccess, Present, RenderGraph, RenderGraphBuilder, RenderGraphInfo,
         Resource, Submit, Task,
     };
-    pub use crate::{Error, Result};
+    pub(crate) use crate::{Error, Result};
 }
 
 #[derive(Debug)]
