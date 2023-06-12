@@ -81,13 +81,13 @@ fn main() {
     }
 
     //A pipeline compiler allows us to load and hot-reload pipelines.
-    //By default, it choses no underlying compiler
-    //(you'd want this if your shipping spirv and a binary to someone without the Vulkan SDK)
-    //Source and asset directory defaults to the current working directory.
+    //This used to be a file manager too, however that has changed.
+    //By default, the include directory is your working directory. This (during development) defaults to where your Cargo.toml lives.
     let pipeline_compiler = device.create_pipeline_compiler(Default::default());
 
-    //Right now this uses lifetimes and const generics which is really annoying, so you'll probably want to use a static string reference
-    //for your shader names (shader names convert into path for that shader)
+    //This used to have annoying lifetime issues and the like.
+    //However it is possible to now clone the pipeline.
+    //Have fun with this! ^^
     let render_pipeline = pipeline_compiler
         .create_graphics_pipeline(GraphicsPipelineInfo {
             //By default, boson will inject `#define the_shader_type_in_lowercase`
@@ -96,11 +96,13 @@ fn main() {
             shaders: vec![
                 Shader{
                     ty: ShaderType::Vertex,
+                    //Here we read the source file into a string. We provide this to the pipeline compiler whenever we want to load or hot reload.
                     source: fs::read_to_string("./triangle.glsl").unwrap(),
                     defines: vec![]
                 },
                 Shader{
                     ty: ShaderType::Fragment,
+                    //The fragment shader is in the same file.
                     source: fs::read_to_string("./triangle.glsl").unwrap(),
                     defines: vec![]
                 },

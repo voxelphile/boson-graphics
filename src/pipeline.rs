@@ -95,7 +95,7 @@ pub struct Define {
     value: String,
 }
 
-pub trait ShaderCompiler {
+pub trait ShaderCompiler: 'static + Send + Sync {
     fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv>;
 }
 
@@ -1147,6 +1147,7 @@ pub(crate) enum Spec {
     Compute(ComputePipelineInfo),
 }
 
+#[derive(Clone)]
 pub struct Pipeline {
     pub(crate) inner: Arc<PipelineInner>,
 }
