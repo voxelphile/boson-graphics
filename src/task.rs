@@ -48,7 +48,7 @@ pub struct RenderGraphBuilder<'a, T> {
 }
 
 impl<'a, T> RenderGraphBuilder<'a, T> {
-    pub fn add<'b: 'a, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'b>(
+    pub fn add<'b: 'a, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + Send + Sync + 'b>(
         &mut self,
         task: Task<T, F>,
     ) {
@@ -792,7 +792,7 @@ pub(crate) enum Qualifier {
     Image(Image, ImageAccess, ImageAspect),
 }
 
-pub struct Task<T, F: ops::FnMut(&mut T, &mut Commands) -> Result<()>> {
+pub struct Task<T, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + Send + Sync> {
     pub resources: Vec<Resource<T>>,
     pub task: F,
 }
