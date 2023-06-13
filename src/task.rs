@@ -773,8 +773,15 @@ impl From<BufferAccess> for Access {
 }
 
 pub enum Resource<T> {
-    Buffer(Box<dyn ops::Fn(&mut T) -> Buffer>, BufferAccess),
-    Image(Box<dyn ops::Fn(&mut T) -> Image>, ImageAccess, ImageAspect),
+    Buffer(
+        Box<dyn ops::Fn(&mut T) -> Buffer + Send + Sync>,
+        BufferAccess,
+    ),
+    Image(
+        Box<dyn ops::Fn(&mut T) -> Image + Send + Sync>,
+        ImageAccess,
+        ImageAspect,
+    ),
 }
 
 impl<T> Resource<T> {
@@ -799,5 +806,5 @@ pub struct Task<T, F: ops::FnMut(&mut T, &mut Commands) -> Result<()> + Send + S
 
 pub struct Node<'a, T> {
     pub resources: Vec<Resource<T>>,
-    pub task: Box<dyn ops::FnMut(&mut T, &mut Commands) -> Result<()> + 'a>,
+    pub task: Box<dyn ops::FnMut(&mut T, &mut Commands) -> Result<()> + Send + Sync + 'a>,
 }
