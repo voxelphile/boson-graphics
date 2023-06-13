@@ -60,6 +60,7 @@ unsafe extern "system" fn debug_callback(
 
 #[allow(dead_code)]
 #[derive(Clone)]
+///The context is your gateway to boson. It starts the vulkan backend and roughly translates to the vulkan instance.
 pub struct Context {
     inner: Arc<ContextInner>,
 }
@@ -91,6 +92,7 @@ impl Default for ContextInfo<'_> {
 }
 
 impl Context {
+    ///Create a new context and start the backend Vulkan instance.
     pub fn new(info: ContextInfo<'_>) -> Result<Self> {
         let entry = Entry::linked();
 

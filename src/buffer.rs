@@ -48,8 +48,8 @@ pub(crate) struct InternalBuffer {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 #[repr(transparent)]
+///A buffer handle, used for bindless buffers.
 pub struct Buffer(pub(crate) u32);
-
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 #[repr(transparent)]

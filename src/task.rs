@@ -155,6 +155,7 @@ impl<T> RenderGraph<'_, T> {
 }
 
 impl<T> RenderGraph<'_, T> {
+    ///Executes the render graph.
     pub fn render(&mut self, home: &mut T) {
         profiling::scope!("RenderGraph", "ev");
 

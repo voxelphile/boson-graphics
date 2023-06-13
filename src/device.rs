@@ -707,6 +707,7 @@ impl From<vk::PhysicalDeviceLimits> for Limits {
 }
 
 impl Device {
+    ///Gets the GPU address of a buffer. Send this to a shader in order to dereference this buffer and retrieve its information.
     pub fn address(&self, buffer: Buffer) -> Result<BufferAddress> {
         let DeviceInner {
             logical_device,
@@ -730,6 +731,7 @@ impl Device {
         }))
     }
 
+    ///Creates a render graph, which is used to submit commands to the GPU in a safe and convienient way.
     pub fn create_render_graph<'a, T>(
         &self,
         info: RenderGraphInfo<'a>,
@@ -759,6 +761,7 @@ impl Device {
         })
     }
 
+    ///Creates an image of the user's specification.
     pub fn create_image(&self, info: ImageInfo<'_>) -> Result<Image> {
         let DeviceInner {
             context,
@@ -890,6 +893,7 @@ impl Device {
         }))
     }
 
+    ///Destroys a buffer immedietely.
     pub fn destroy_buffer(&self, buffer: Buffer) -> Result<()> {
         let DeviceInner {
             logical_device,
@@ -912,6 +916,7 @@ impl Device {
         return Ok(());
     }
 
+    ///Creates a buffer of the user's specification.
     pub fn create_buffer(&self, info: BufferInfo<'_>) -> Result<Buffer> {
         let DeviceInner {
             context,
@@ -997,6 +1002,7 @@ impl Device {
         }))
     }
 
+    ///Creates a binary semaphore, useful for GPU synchronization.
     pub fn create_binary_semaphore(
         &self,
         info: BinarySemaphoreInfo<'_>,
@@ -1029,6 +1035,8 @@ impl Device {
             }))
     }
 
+    ///Creates a timeline semaphore. This is useful for tracking the GPU's work.
+    ///More work needs to be done before timeline semaphores are properly integrated into Boson
     pub fn create_timeline_semaphore(
         &self,
         info: TimelineSemaphoreInfo<'_>,
@@ -1077,6 +1085,7 @@ impl Device {
             }))
     }
 
+    ///Gets the next presentable image from the swapchain.
     pub fn acquire_next_image(&self, acquire: Acquire) -> Result<Image> {
         let DeviceInner { resources, .. } = &*self.inner;
 
@@ -1128,6 +1137,7 @@ impl Device {
         Ok(images[next_image_index as usize])
     }
 
+    ///Gets the swapchain image's format.
     pub fn presentation_format(&self, swapchain: Swapchain) -> Result<Format> {
         let DeviceInner { resources, .. } = &*self.inner;
 
@@ -1141,12 +1151,18 @@ impl Device {
         Ok(*format)
     }
 
+    ///Stops all execution until the GPU is done processing its current workload.
+    ///Usually, you would not want to use this, as it slows execution to a crawl if used in a hot loop.
+    ///It is more useful for cleaning up and the like.
     pub fn wait_idle(&self) {
         let DeviceInner { logical_device, .. } = &*self.inner;
 
         unsafe { logical_device.device_wait_idle() };
     }
 
+    ///A swapchain holds the images which will be used for drawing to the screen.
+    ///It usually holds more than one image, which prevents a number of issues such as tearing.
+    ///Call `acquire_next_image` to get the current swapchain image.
     pub fn create_swapchain(&self, info: SwapchainInfo<'_>) -> Result<Swapchain> {
         let DeviceInner {
             context,
@@ -1344,6 +1360,7 @@ impl Device {
         }))
     }
 
+    ///A pipeline compiler allows you to create pipelines from shader source code.
     pub fn create_pipeline_compiler(&self, info: PipelineCompilerInfo) -> PipelineCompiler {
         PipelineCompiler {
             inner: Arc::new(PipelineCompilerInner {

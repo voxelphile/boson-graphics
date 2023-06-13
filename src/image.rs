@@ -71,6 +71,7 @@ impl Default for ImageInfo<'_> {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 #[repr(transparent)]
+///An image handle, used for bindless images.
 pub struct Image(pub u32);
 
 impl From<Image> for u32 {

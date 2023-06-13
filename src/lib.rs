@@ -1,14 +1,14 @@
-mod buffer;
-mod commands;
-mod context;
-mod device;
-mod format;
-mod image;
-mod memory;
-mod pipeline;
-mod semaphore;
-mod swapchain;
-mod task;
+pub mod buffer;
+pub mod commands;
+pub mod context;
+pub mod device;
+pub mod format;
+pub mod image;
+pub mod memory;
+pub mod pipeline;
+pub mod semaphore;
+pub mod swapchain;
+pub mod task;
 
 use std::error;
 use std::fmt;

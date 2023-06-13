@@ -288,16 +288,20 @@ pub struct RenderArea {
 }
 
 impl Commands<'_> {
+    ///This tells the render graph to send the tasks to the GPU.
+    ///Without it, nothing will happen.
     pub fn submit(&mut self, submit: Submit) -> Result<()> {
         *self.submit = Some(submit);
         Ok(())
     }
 
+    ///This tells the GPU to show what we drew to the screen.
     pub fn present(&mut self, present: Present) -> Result<()> {
         *self.present = Some(present);
         Ok(())
     }
 
+    ///This tells the GPU to dispatch the currently bound compute pipeline.
     pub fn dispatch(&mut self, x: usize, y: usize, z: usize) -> Result<()> {
         let Commands {
             device,
@@ -312,6 +316,8 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///This sends information to the pipeline; this information hitches a ride with the command as it is sent to the GPU.
+    ///It should be no more than 128 bytes.
     pub fn push_constant<'a, T: Copy>(&mut self, push_constant: PushConstant<'a, T>) -> Result<()> {
         let Commands {
             device,
@@ -351,6 +357,8 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Stops everything in the queue and writes to a buffer. If you use this in the middle of a render graph,
+    ///it can create "bubbles" in the pipeline; essentially, instances where the gpu is waiting for work to be done.
     pub fn write_buffer<T: Copy>(&mut self, write: BufferWrite<T>) -> Result<()> {
         let Commands {
             device,
@@ -400,6 +408,8 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Stops everything in the queue and reads from a buffer. If you use this in the middle of a render graph,
+    ///it can create "bubbles" in the pipeline; essentially, instances where the gpu is waiting for work to be done.
     pub fn read_buffer(&mut self, read: BufferRead) -> Result<Vec<u8>> {
         let Commands {
             device,
@@ -452,6 +462,7 @@ impl Commands<'_> {
         Ok(dst)
     }
 
+    ///Set the resolution to render at.
     pub fn set_resolution(&mut self, resolution: (u32, u32), flip_y: bool) -> Result<()> {
         let (width, height) = resolution;
 
@@ -495,6 +506,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Copy from one buffer to another.
     pub fn copy_buffer_to_buffer(&mut self, copy: BufferCopy) -> Result<()> {
         let Commands {
             device,
@@ -555,6 +567,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Copy from one buffer to an image.
     pub fn copy_buffer_to_image(&mut self, copy: ImageCopy) -> Result<()> {
         let Commands {
             device,
@@ -641,6 +654,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Copy from an image to a buffer.
     pub fn copy_image_to_buffer(&mut self, copy: BufferImageCopy) -> Result<()> {
         let Commands {
             device,
@@ -727,6 +741,8 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Tell the GPU we would like to start rendering.
+    ///After this command, set your pipeline and push constant, then draw.
     pub fn start_rendering(&mut self, render: Render) -> Result<()> {
         let Commands {
             device,
@@ -870,6 +886,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Tell the GPU we would like to stop rendering.
     pub fn end_rendering(&mut self) -> Result<()> {
         let Commands {
             device,
@@ -971,6 +988,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Draw using vertex count
     pub fn draw(&mut self, draw: Draw) -> Result<()> {
         let Commands {
             device,
@@ -989,6 +1007,7 @@ impl Commands<'_> {
         Ok(())
     }
 
+    ///Synchronizes commands in the same task.
     pub fn pipeline_barrier(&mut self, pipeline_barrier: PipelineBarrier) -> Result<()> {
         let PipelineBarrier {
             src_stage,
