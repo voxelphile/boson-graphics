@@ -222,6 +222,16 @@ pub struct DrawIndirectCommand {
     pub first_instance: u32,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
+pub struct DrawIndexedIndirectCommand {
+    index_count: u32,
+    instance_count: u32,
+    first_index: u32,
+    vertex_offset: i32,
+    first_instance: u32,
+}
+
 pub struct DrawIndexed {
     pub index_count: usize,
 }
@@ -988,6 +998,52 @@ impl Commands<'_> {
         Ok(())
     }
 
+    pub fn draw_indexed_indirect(&mut self, draw_indirect: DrawIndirect) -> Result<()> {
+        let Commands {
+            device,
+            command_buffer,
+            qualifiers,
+            ..
+        } = self;
+
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*device;
+
+        let DrawIndirect {
+            buffer,
+            offset,
+            draw_count,
+            stride,
+        } = draw_indirect;
+
+        let Qualifier::Buffer(buffer_handle, _) = qualifiers.get(buffer).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let buffer = resources
+            .lock()
+            .unwrap()
+            .buffers
+            .get(*buffer_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .buffer;
+
+        unsafe {
+            logical_device.cmd_draw_indexed_indirect(
+                **command_buffer,
+                buffer,
+                offset as u64,
+                draw_count as u32,
+                stride as u32,
+            );
+        }
+
+        Ok(())
+    }
+
     ///Draw using vertex count
     pub fn draw(&mut self, draw: Draw) -> Result<()> {
         let Commands {
@@ -1007,7 +1063,7 @@ impl Commands<'_> {
         Ok(())
     }
 
-    ///Synchronizes commands in the same task.
+    ///Sets-up synchronization of commands in the same task.
     pub fn pipeline_barrier(&mut self, pipeline_barrier: PipelineBarrier) -> Result<()> {
         let PipelineBarrier {
             src_stage,
