@@ -225,11 +225,11 @@ pub struct DrawIndirectCommand {
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug)]
 pub struct DrawIndexedIndirectCommand {
-    index_count: u32,
-    instance_count: u32,
-    first_index: u32,
-    vertex_offset: i32,
-    first_instance: u32,
+    pub index_count: u32,
+    pub instance_count: u32,
+    pub first_index: u32,
+    pub vertex_offset: i32,
+    pub first_instance: u32,
 }
 
 pub struct DrawIndexed {

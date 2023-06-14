@@ -1,6 +1,6 @@
 [package]
 name = "boson"
-version = "0.13.7"
+version = "0.13.8"
 edition = "2021"
 description = "A vulkan abstraction layer."
 license = "MIT"
