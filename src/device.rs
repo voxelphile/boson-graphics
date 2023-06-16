@@ -1151,6 +1151,19 @@ impl Device {
         Ok(*format)
     }
 
+    ///Gets the image's format.
+    pub fn image_format(&self, image: Image) -> Result<Format> {
+        let DeviceInner { resources, .. } = &*self.inner;
+
+        let resources = resources.lock().unwrap();
+
+        Ok(resources
+            .images
+            .get(image)
+            .ok_or(Error::ResourceNotFound)?
+            .get_format())
+    }
+
     ///Stops all execution until the GPU is done processing its current workload.
     ///Usually, you would not want to use this, as it slows execution to a crawl if used in a hot loop.
     ///It is more useful for cleaning up and the like.
