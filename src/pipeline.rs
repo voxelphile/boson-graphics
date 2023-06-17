@@ -119,7 +119,21 @@ impl ShaderCompiler for Shaderc {
             additional_options.add_macro_definition(name, Some(value));
         }
 
-        additional_options.add_macro_definition(&options.ty.to_string(), None);
+        additional_options.add_macro_definition("shader_type_vertex", Some(&0.to_string()));
+        additional_options.add_macro_definition("shader_type_fragment", Some(&1.to_string()));
+        additional_options.add_macro_definition("shader_type_compute", Some(&2.to_string()));
+
+        additional_options.add_macro_definition(
+            "shader_type",
+            Some(
+                &match options.ty {
+                    ShaderType::Vertex => 0,
+                    ShaderType::Fragment => 1,
+                    ShaderType::Compute => 2,
+                }
+                .to_string(),
+            ),
+        );
 
         let include_dir = options.include_dir.to_owned();
         additional_options.set_include_callback(move |name, _, _, _| {
