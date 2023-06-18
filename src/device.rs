@@ -1241,7 +1241,7 @@ impl Device {
             };
 
             let image_array_layers = 1;
-            let image_usage = vk::ImageUsageFlags::COLOR_ATTACHMENT;
+            let image_usage = vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::STORAGE;
             let image_sharing_mode = vk::SharingMode::EXCLUSIVE;
 
             let queue_family_index_count = queue_family_indices.len() as _;
