@@ -14,7 +14,7 @@ struct Push {
 
 decl_push_constant(Push)
 
-#if defined(vertex)
+#if shader_type == shader_type_vertex
 
 layout(location = 0) out f32vec4 color;
 
@@ -46,7 +46,7 @@ void main() {
     gl_Position = f32vec4(_2d_position, 0.0, 1.0);
 }
 
-#elif defined(fragment)
+#elif shader_type == shader_type_fragment
 
 layout(location = 0) in vec4 color;
 
