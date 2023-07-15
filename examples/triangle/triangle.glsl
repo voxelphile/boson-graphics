@@ -14,7 +14,7 @@ struct Push {
 
 decl_push_constant(Push)
 
-#if defined(vertex)
+#if shader_type == shader_type_vertex
 
 layout(location = 0) out f32vec4 color;
 
@@ -22,8 +22,8 @@ layout(location = 0) out f32vec4 color;
 void main() {
     f32 time = deref(push.time_buffer).time_since_startup;
 
-    f32 x = f32(1 - i32(gl_VertexIndex)) * 0.5;
-    f32 y = f32(i32(gl_VertexIndex & 1) * 2 - 1) * 0.5;
+    f32 x = f32(i32(1) - i32(gl_VertexIndex)) * 0.5;
+    f32 y = f32((i32(gl_VertexIndex) & i32(1)) * 2 - 1) * 0.5;
 
     if (gl_VertexIndex == 0) {
         color = f32vec4(1.0, 0.0, 0.0, 1.0);
@@ -46,7 +46,7 @@ void main() {
     gl_Position = f32vec4(_2d_position, 0.0, 1.0);
 }
 
-#elif defined(fragment)
+#elif shader_type == shader_type_fragment
 
 layout(location = 0) in vec4 color;
 

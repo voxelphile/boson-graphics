@@ -46,7 +46,7 @@ pub(crate) struct InternalBuffer {
     pub(crate) debug_name: String,
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 ///A buffer handle, used for bindless buffers.
 pub struct Buffer(pub(crate) u32);

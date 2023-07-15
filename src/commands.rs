@@ -1,20 +1,23 @@
 use crate::device::DeviceInner;
 use crate::pipeline::{PipelineInner, PipelineModify};
 use crate::prelude::*;
+use crate::renderpass::{Framebuffer, RenderPass};
 
+use std::collections::HashMap;
 use std::mem;
 use std::ops;
 use std::ptr;
 use std::slice;
 use std::sync::Mutex;
 
-use ash::vk;
+use ash::vk::{self, Offset2D, Rect2D};
 
 use bitflags::bitflags;
 
 pub struct Commands<'a> {
     pub(crate) device: &'a DeviceInner,
     pub(crate) qualifiers: &'a [Qualifier],
+    pub(crate) swapchain: &'a Swapchain,
     pub(crate) command_buffer: &'a vk::CommandBuffer,
     pub(crate) submit: &'a mut Option<Submit>,
     pub(crate) present: &'a mut Option<Present>,
@@ -178,12 +181,18 @@ pub struct BufferRead {
     pub size: usize,
 }
 
-pub struct BufferCopy {
-    pub from: usize,
-    pub to: usize,
+#[derive(Clone, Copy)]
+pub struct Region {
     pub src: usize,
     pub dst: usize,
     pub size: usize,
+}
+
+#[derive(Clone)]
+pub struct BufferCopy {
+    pub from: usize,
+    pub to: usize,
+    pub regions: Vec<Region>,
 }
 
 pub struct ImageCopy {
@@ -204,6 +213,9 @@ pub struct BufferImageCopy {
 
 pub struct Draw {
     pub vertex_count: usize,
+    pub instance_count: usize,
+    pub first_vertex: usize,
+    pub first_instance: usize,
 }
 
 pub struct DrawIndirect {
@@ -220,6 +232,16 @@ pub struct DrawIndirectCommand {
     pub instance_count: u32,
     pub first_vertex: u32,
     pub first_instance: u32,
+}
+
+#[derive(Clone)]
+pub enum WriteBinding {
+    Buffer {
+        buffer: Buffer,
+        range: usize,
+        offset: usize,
+    },
+    Image(Image),
 }
 
 #[repr(C)]
@@ -255,12 +277,19 @@ impl Default for Clear {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum LoadOp {
     #[default]
     Load,
     Clear,
     DontCare,
+}
+
+pub struct RenderPassBeginInfo<'a> {
+    pub framebuffer: &'a Framebuffer,
+    pub render_pass: &'a RenderPass,
+    pub clear: Vec<Clear>,
+    pub render_area: RenderArea,
 }
 
 impl From<LoadOp> for vk::AttachmentLoadOp {
@@ -324,6 +353,75 @@ impl Commands<'_> {
         unsafe { logical_device.cmd_dispatch(**command_buffer, x as _, y as _, z as _) };
 
         Ok(())
+    }
+
+    pub fn start_render_pass(&mut self, render_pass_info: RenderPassBeginInfo<'_>) -> Result<()> {
+        let mut cv = vec![];
+
+        for clear in render_pass_info.clear {
+            cv.push(match clear {
+                Clear::Color(r, g, b, a) => vk::ClearValue {
+                    color: vk::ClearColorValue {
+                        float32: [r, g, b, a],
+                    },
+                },
+                Clear::Depth(d) => vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: d,
+                        stencil: 0,
+                    },
+                },
+                Clear::DepthStencil(d, s) => vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: d,
+                        stencil: s as _,
+                    },
+                },
+            });
+        }
+        let begin_info = vk::RenderPassBeginInfo {
+            render_pass: render_pass_info.render_pass.render_pass,
+            framebuffer: render_pass_info.framebuffer.framebuffer,
+            render_area: vk::Rect2D {
+                offset: vk::Offset2D {
+                    x: render_pass_info.render_area.x,
+                    y: render_pass_info.render_area.y,
+                },
+                extent: vk::Extent2D {
+                    width: render_pass_info.render_area.width,
+                    height: render_pass_info.render_area.height,
+                },
+            },
+            clear_value_count: cv.len() as _,
+            p_clear_values: cv.as_ptr(),
+            ..Default::default()
+        };
+
+        let Commands {
+            device,
+            command_buffer,
+            ..
+        } = self;
+
+        unsafe {
+            device.logical_device.cmd_begin_render_pass(
+                **command_buffer,
+                &begin_info,
+                vk::SubpassContents::INLINE,
+            )
+        };
+
+        Ok(())
+    }
+
+    pub fn end_render_pass(&mut self, render_pass: &'_ RenderPass) {
+        let Commands {
+            device,
+            command_buffer,
+            ..
+        } = self;
+
+        unsafe { device.logical_device.cmd_end_render_pass(**command_buffer) };
     }
 
     ///This sends information to the pipeline; this information hitches a ride with the command as it is sent to the GPU.
@@ -531,13 +629,7 @@ impl Commands<'_> {
             ..
         } = &*device;
 
-        let BufferCopy {
-            from,
-            to,
-            src,
-            dst,
-            size,
-        } = copy;
+        let BufferCopy { from, to, regions } = copy;
 
         let resources = resources.lock().unwrap();
 
@@ -564,11 +656,14 @@ impl Commands<'_> {
             .get(*to_buffer_handle)
             .ok_or(Error::ResourceNotFound)?;
 
-        let regions = [vk::BufferCopy {
-            src_offset: src as _,
-            dst_offset: dst as _,
-            size: size as _,
-        }];
+        let regions = regions
+            .into_iter()
+            .map(|x| vk::BufferCopy {
+                src_offset: x.src as _,
+                dst_offset: x.dst as _,
+                size: x.size as _,
+            })
+            .collect::<Vec<_>>();
 
         unsafe {
             logical_device.cmd_copy_buffer(**command_buffer, *from_buffer, *to_buffer, &regions);
@@ -913,24 +1008,122 @@ impl Commands<'_> {
         Ok(())
     }
 
+    pub fn write_bindings(
+        &mut self,
+        pipeline: &Pipeline,
+        bindings: Vec<WriteBinding>,
+    ) -> Result<()> {
+        let Commands {
+            device,
+            command_buffer,
+            swapchain,
+            ..
+        } = self;
+
+        let resources = device.resources.lock().unwrap();
+
+        let internal_swapchain = resources
+            .swapchains
+            .get(**swapchain)
+            .ok_or(Error::InvalidResource)?;
+
+        let mut buffer_infos = HashMap::<usize, vk::DescriptorBufferInfo>::new();
+        let mut image_infos = HashMap::<usize, vk::DescriptorImageInfo>::new();
+
+        for (i, binding) in bindings.iter().enumerate() {
+            match binding {
+                WriteBinding::Buffer {
+                    buffer,
+                    range,
+                    offset,
+                } => {
+                    let internal_buffer = resources
+                        .buffers
+                        .get(*buffer)
+                        .ok_or(Error::InvalidResource)?;
+
+                    buffer_infos.insert(
+                        i,
+                        vk::DescriptorBufferInfo {
+                            buffer: internal_buffer.buffer,
+                            offset: *offset as u64,
+                            range: *range as u64,
+                        },
+                    );
+                }
+                WriteBinding::Image(image) => {
+                    let internal_image =
+                        resources.images.get(*image).ok_or(Error::InvalidResource)?;
+                    image_infos.insert(
+                        i,
+                        vk::DescriptorImageInfo {
+                            sampler: vk::Sampler::null(),
+                            image_view: internal_image.get_image_view(),
+                            image_layout: vk::ImageLayout::GENERAL,
+                        },
+                    );
+                }
+            }
+        }
+
+        let descriptor_writes = bindings
+            .into_iter()
+            .enumerate()
+            .map(|(i, binding)| {
+                let buffer = buffer_infos
+                    .get(&i)
+                    .map(|r| r as *const _)
+                    .unwrap_or(ptr::null());
+                let image = image_infos
+                    .get(&i)
+                    .map(|r| r as *const _)
+                    .unwrap_or(ptr::null());
+
+                vk::WriteDescriptorSet {
+                    dst_set: pipeline.inner.modify.lock().unwrap().descriptor_sets
+                        [internal_swapchain.current_frame],
+                    dst_binding: i as _,
+                    dst_array_element: 0,
+                    descriptor_count: 1,
+                    descriptor_type: match binding {
+                        WriteBinding::Buffer { .. } => vk::DescriptorType::STORAGE_BUFFER,
+                        WriteBinding::Image(_) => vk::DescriptorType::STORAGE_IMAGE,
+                    },
+                    p_buffer_info: buffer,
+                    p_image_info: image,
+                    ..Default::default()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        unsafe {
+            device
+                .logical_device
+                .update_descriptor_sets(&descriptor_writes, &[])
+        };
+        Ok(())
+    }
+
     pub fn set_pipeline(&mut self, pipeline: &Pipeline) -> Result<()> {
         let Commands {
             device,
             command_buffer,
+            swapchain,
             ..
         } = self;
 
-        let DeviceInner {
-            logical_device,
-            descriptor_set,
-            ..
-        } = &*device;
+        let DeviceInner { logical_device, .. } = &*device;
 
         let PipelineInner {
             bind_point, modify, ..
         } = &*pipeline.inner;
 
-        let PipelineModify { layout, pipeline } = modify.lock().unwrap().clone();
+        let PipelineModify {
+            layout,
+            pipeline,
+            descriptor_sets,
+            ..
+        } = modify.lock().unwrap().clone();
 
         let bind_point = vk::PipelineBindPoint::from(*bind_point);
 
@@ -938,13 +1131,20 @@ impl Commands<'_> {
             logical_device.cmd_bind_pipeline(**command_buffer, bind_point, pipeline);
         }
 
+        let mut resources = device.resources.lock().unwrap();
+
+        let internal_swapchain = resources
+            .swapchains
+            .get(**swapchain)
+            .ok_or(Error::InvalidResource)?;
+
         unsafe {
             logical_device.cmd_bind_descriptor_sets(
                 **command_buffer,
                 bind_point,
                 layout,
                 0,
-                &[*descriptor_set],
+                &[descriptor_sets[internal_swapchain.last_acquisition_index.unwrap() as usize]],
                 &[],
             );
         }
@@ -1054,10 +1254,21 @@ impl Commands<'_> {
 
         let DeviceInner { logical_device, .. } = &*device;
 
-        let Draw { vertex_count } = draw;
+        let Draw {
+            vertex_count,
+            instance_count,
+            first_vertex,
+            first_instance,
+        } = draw;
 
         unsafe {
-            logical_device.cmd_draw(**command_buffer, vertex_count as _, 1, 0, 0);
+            logical_device.cmd_draw(
+                **command_buffer,
+                vertex_count as _,
+                instance_count as _,
+                first_vertex as _,
+                first_instance as _,
+            );
         }
 
         Ok(())

@@ -2,6 +2,11 @@ use crate::context::ContextInner;
 use crate::memory;
 use crate::pipeline::PipelineCompilerInner;
 use crate::prelude::*;
+use crate::renderpass::Framebuffer;
+use crate::renderpass::FramebufferInfo;
+use crate::renderpass::RenderPass;
+use crate::renderpass::RenderPassAttachment;
+use crate::renderpass::RenderPassInfo;
 use crate::semaphore::InternalSemaphore;
 use crate::task::RenderGraphInfo;
 
@@ -10,13 +15,19 @@ use std::marker;
 use std::mem;
 use std::ops;
 use std::os::raw;
+use std::ptr;
 use std::sync::{Arc, Mutex};
 
 use ash::extensions::{ext, khr};
+use ash::vk::AttachmentLoadOp;
+use ash::vk::AttachmentStoreOp;
+use ash::vk::SubpassDescription;
 use ash::{vk, Entry, Instance};
 
 use bitflags::bitflags;
 
+use raw_window_handle::AndroidDisplayHandle;
+use raw_window_handle::AndroidNdkWindowHandle;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
@@ -142,10 +153,15 @@ pub struct DeviceInner {
     pub(crate) logical_device: ash::Device,
     pub(crate) surface: (khr::Surface, vk::SurfaceKHR),
     pub(crate) queue_family_indices: Vec<u32>,
-    pub(crate) descriptor_pool: vk::DescriptorPool,
+    pub(crate) command_pool: vk::CommandPool,
+    #[cfg(all(feature = "bindless"))]
+    pub(crate) bindless: Bindless,
+}
+
+#[cfg(all(feature = "bindless"))]
+pub struct Bindless {
     pub(crate) descriptor_set: vk::DescriptorSet,
     pub(crate) descriptor_set_layout: vk::DescriptorSetLayout,
-    pub(crate) command_pool: vk::CommandPool,
     pub(crate) general_address_buffer: vk::Buffer,
     pub(crate) general_address_memory: vk::DeviceMemory,
     pub(crate) staging_address_buffer: vk::Buffer,
@@ -171,6 +187,10 @@ impl Default for DeviceInfo<'_> {
             display: RawDisplayHandle::Xlib(XlibDisplayHandle::empty()),
             #[cfg(target_os = "linux")]
             window: RawWindowHandle::Xlib(XlibWindowHandle::empty()),
+            #[cfg(target_os = "android")]
+            display: RawDisplayHandle::Android(AndroidDisplayHandle::empty()),
+            #[cfg(target_os = "android")]
+            window: RawWindowHandle::AndroidNdk(AndroidNdkWindowHandle::empty()),
             selector: &default_device_selector,
             features: Default::default(),
             debug_name: "Device",
@@ -761,6 +781,90 @@ impl Device {
         })
     }
 
+    pub fn create_render_pass(&self, info: RenderPassInfo) -> Result<RenderPass> {
+        let DeviceInner { logical_device, .. } = &*self.inner;
+
+        let mut descriptor = vec![];
+        let mut reference = vec![];
+
+        for RenderPassAttachment {
+            image,
+            load_op,
+            format,
+            initial_layout,
+            final_layout,
+        } in info.color.clone()
+        {
+            descriptor.push(vk::AttachmentDescription {
+                format: format.into(),
+                samples: vk::SampleCountFlags::TYPE_1,
+                load_op: load_op.into(),
+                store_op: AttachmentStoreOp::STORE,
+                stencil_load_op: AttachmentLoadOp::DONT_CARE,
+                stencil_store_op: AttachmentStoreOp::DONT_CARE,
+                initial_layout: initial_layout.into(),
+                final_layout: final_layout.into(),
+                ..Default::default()
+            });
+            reference.push(vk::AttachmentReference {
+                attachment: image as u32,
+                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            });
+        }
+
+        let depth = {
+            let (stencil_load_op, stencil_store_op) = if info.stencil_load_op != LoadOp::DontCare {
+                (info.stencil_load_op.into(), AttachmentStoreOp::STORE)
+            } else {
+                (AttachmentLoadOp::DONT_CARE, AttachmentStoreOp::DONT_CARE)
+            };
+            if let Some(x) = info.depth {
+                descriptor.push(vk::AttachmentDescription {
+                    format: x.format.into(),
+                    samples: vk::SampleCountFlags::TYPE_1,
+                    load_op: x.load_op.into(),
+                    store_op: AttachmentStoreOp::STORE,
+                    stencil_load_op,
+                    stencil_store_op,
+                    initial_layout: x.initial_layout.into(),
+                    final_layout: x.final_layout.into(),
+                    ..Default::default()
+                });
+                Some(vk::AttachmentReference {
+                    attachment: info.color.len() as u32,
+                    layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                })
+            } else {
+                None
+            }
+        };
+
+        let subpass_description = vk::SubpassDescription {
+            pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+            color_attachment_count: reference.len() as u32,
+            p_color_attachments: reference.as_ptr(),
+            p_depth_stencil_attachment: depth
+                .as_ref()
+                .map(|x| x as *const _)
+                .unwrap_or(ptr::null()),
+            ..Default::default()
+        };
+        let subpasses = [subpass_description];
+
+        let render_pass_info = vk::RenderPassCreateInfo {
+            attachment_count: descriptor.len() as u32,
+            p_attachments: descriptor.as_ptr(),
+            subpass_count: 1,
+            p_subpasses: subpasses.as_ptr(),
+            ..Default::default()
+        };
+
+        let render_pass = unsafe { logical_device.create_render_pass(&render_pass_info, None) }
+            .map_err(|_| Error::Creation)?;
+
+        Ok(RenderPass { render_pass })
+    }
+
     ///Creates an image of the user's specification.
     pub fn create_image(&self, info: ImageInfo<'_>) -> Result<Image> {
         let DeviceInner {
@@ -768,7 +872,6 @@ impl Device {
             physical_device,
             logical_device,
             resources,
-            descriptor_set,
             ..
         } = &*self.inner;
 
@@ -879,6 +982,7 @@ impl Device {
                 base_array_layer: 0,
                 layer_count: 1,
             },
+
             ..Default::default()
         };
 
@@ -923,7 +1027,6 @@ impl Device {
             physical_device,
             logical_device,
             resources,
-            descriptor_set,
             ..
         } = &*self.inner;
 
@@ -1085,6 +1188,79 @@ impl Device {
             }))
     }
 
+    pub fn create_framebuffer(&self, info: FramebufferInfo) -> Result<Framebuffer> {
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*self.inner;
+
+        let resources = resources.lock().unwrap();
+
+        let mut views = vec![];
+
+        for image in info.attachments {
+            let internal_image = resources.images.get(image).ok_or(Error::ResourceNotFound)?;
+
+            views.push(internal_image.get_image_view());
+        }
+
+        let create_info = vk::FramebufferCreateInfo {
+            render_pass: info.render_pass.render_pass,
+            attachment_count: views.len() as u32,
+            p_attachments: views.as_ptr(),
+            width: info.width,
+            height: info.height,
+            layers: 1,
+            ..Default::default()
+        };
+
+        let framebuffer = unsafe { logical_device.create_framebuffer(&create_info, None) }
+            .map_err(|_| Error::Creation)?;
+
+        Ok(Framebuffer { framebuffer })
+    }
+
+    pub fn get_swapchain_images(&self, swapchain: Swapchain) -> Result<Vec<Image>> {
+        let DeviceInner { resources, .. } = &*self.inner;
+
+        let mut resources = resources.lock().unwrap();
+        let InternalSwapchain {
+            loader,
+            handle,
+            images,
+            last_acquisition_index,
+            current_frame,
+            allow_acquisition,
+            ..
+        } = resources
+            .swapchains
+            .get_mut(swapchain)
+            .ok_or(Error::ResourceNotFound)?;
+
+        Ok(images.clone())
+    }
+
+    pub fn get_current_frame_index(&self, swapchain: Swapchain) -> Result<usize> {
+        let DeviceInner { resources, .. } = &*self.inner;
+
+        let mut resources = resources.lock().unwrap();
+        let InternalSwapchain {
+            loader,
+            handle,
+            images,
+            last_acquisition_index,
+            current_frame,
+            allow_acquisition,
+            ..
+        } = resources
+            .swapchains
+            .get_mut(swapchain)
+            .ok_or(Error::ResourceNotFound)?;
+
+        Ok(*current_frame)
+    }
+
     ///Gets the next presentable image from the swapchain.
     pub fn acquire_next_image(&self, acquire: Acquire) -> Result<Image> {
         let DeviceInner { resources, .. } = &*self.inner;
@@ -1222,12 +1398,7 @@ impl Device {
         let swapchain_create_info = {
             let surface = surface_handle;
 
-            let min_image_count = match info.present_mode {
-                PresentMode::TripleBufferWaitForVBlank => 3,
-                PresentMode::DoNotWaitForVBlank
-                | PresentMode::DoubleBufferWaitForVBlank
-                | PresentMode::DoubleBufferWaitForVBlankRelaxed => 2,
-            };
+            let min_image_count = 3;
 
             let image_format = format;
             let image_color_space = color_space;

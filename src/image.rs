@@ -94,6 +94,8 @@ pub enum ImageLayout {
     TransferSrcOptimal,
     TransferDstOptimal,
     AttachmentOptimal,
+    ColorAttachmentOptimal,
+    DepthStencilAttachmentOptimal,
     Present,
 }
 
@@ -106,6 +108,8 @@ impl From<ImageLayout> for vk::ImageLayout {
             ImageLayout::TransferDstOptimal => Self::TRANSFER_DST_OPTIMAL,
             ImageLayout::General => Self::GENERAL,
             ImageLayout::AttachmentOptimal => Self::ATTACHMENT_OPTIMAL,
+            ImageLayout::ColorAttachmentOptimal => Self::COLOR_ATTACHMENT_OPTIMAL,
+            ImageLayout::DepthStencilAttachmentOptimal => Self::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             ImageLayout::Present => Self::PRESENT_SRC_KHR,
         }
     }

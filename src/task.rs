@@ -174,10 +174,8 @@ impl<T> RenderGraph<'_, T> {
             logical_device,
             queue_family_indices,
             resources,
-            staging_address_buffer,
-            staging_address_memory,
-            general_address_buffer,
-            descriptor_set,
+            #[cfg(all(feature = "bindless"))]
+            bindless,
             ..
         } = &**device;
 
@@ -223,6 +221,7 @@ impl<T> RenderGraph<'_, T> {
                 .begin_command_buffer(command_buffers[current_frame], &Default::default());
         }
 
+        #[cfg(all(feature = "bindless"))]
         {
             profiling::scope!("address book and descriptor set", "ev");
 
@@ -461,6 +460,7 @@ impl<T> RenderGraph<'_, T> {
             let mut commands = Commands {
                 device: &device,
                 qualifiers: &qualifiers,
+                swapchain: &swapchain,
                 command_buffer: &command_buffers[current_frame],
                 submit: &mut submit,
                 present: &mut present,

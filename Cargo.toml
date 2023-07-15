@@ -18,7 +18,12 @@ raw-window-handle = "0.5.0"
 bitflags = "2.1.0"
 lazy_static = "1.4.0"
 profiling = "1.0.8"
-shaderc = "0.8.2"
+shaderc = { version = "0.8.2", optional = true }
 
 [workspace]
 members = ["./", "examples/*"]
+
+
+[features]
+shaderc = ["dep:shaderc"]
+bindless = []

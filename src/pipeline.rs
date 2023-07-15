@@ -1,24 +1,31 @@
 use crate::device::DeviceInner;
+use crate::device::MAX_FRAMES_IN_FLIGHT;
 use crate::prelude::*;
 
+use core::slice;
 use std::borrow;
+use std::char::MAX;
 use std::env;
 use std::ffi;
 use std::fmt;
 use std::fs;
 use std::io::Write;
+use std::iter;
+use std::mem;
 use std::path;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process;
+use std::ptr;
 use std::sync::{Arc, Mutex};
 
 use ash::vk;
 
+use ash::vk::DescriptorType;
+use ash::vk::ShaderStageFlags;
 use bitflags::bitflags;
 
 use lazy_static::lazy_static;
-use shaderc::ResolvedInclude;
 
 pub type Spv = Vec<u32>;
 
@@ -26,7 +33,7 @@ pub type Spv = Vec<u32>;
 #[derive(Clone)]
 pub struct Shader {
     pub ty: ShaderType,
-    pub source: String,
+    pub source: Vec<u8>,
     pub defines: Vec<Define>,
 }
 
@@ -34,7 +41,7 @@ impl Default for Shader {
     fn default() -> Self {
         Self {
             ty: ShaderType::Vertex,
-            source: String::new(),
+            source: vec![],
             defines: vec![],
         }
     }
@@ -84,7 +91,7 @@ pub struct ShaderCompilerInfo {
 
 pub struct ShaderCompilationOptions<'a> {
     include_dir: &'a Path,
-    source: &'a String,
+    source: &'a [u8],
     ty: ShaderType,
     defines: &'a [Define],
 }
@@ -99,10 +106,29 @@ pub trait ShaderCompiler: 'static + Send + Sync {
     fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv>;
 }
 
+pub struct ByteToSpirvCompiler;
+
+impl ShaderCompiler for ByteToSpirvCompiler {
+    fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv> {
+        Ok(unsafe {
+            slice::from_raw_parts(
+                options.source.as_ptr() as *const _,
+                options.source.len() / mem::size_of::<u32>(),
+            )
+        }
+        .to_vec())
+    }
+}
+
+#[cfg(all(feature = "shaderc"))]
+use shaderc::ResolvedInclude;
+
+#[cfg(all(feature = "shaderc"))]
 pub struct Shaderc {
     compiler: shaderc::Compiler,
 }
 
+#[cfg(all(feature = "shaderc"))]
 impl Shaderc {
     fn new() -> Self {
         Self {
@@ -111,8 +137,11 @@ impl Shaderc {
     }
 }
 
+#[cfg(all(feature = "shaderc"))]
 impl ShaderCompiler for Shaderc {
     fn compile_to_spv(&self, options: ShaderCompilationOptions) -> Result<Spv> {
+        let source = String::from_utf8(options.source.to_vec()).unwrap();
+
         let mut additional_options = shaderc::CompileOptions::new().unwrap();
 
         for Define { name, value } in options.defines {
@@ -123,6 +152,7 @@ impl ShaderCompiler for Shaderc {
         additional_options.add_macro_definition("shader_type_fragment", Some(&1.to_string()));
         additional_options.add_macro_definition("shader_type_compute", Some(&2.to_string()));
 
+        additional_options.set_generate_debug_info();
         additional_options.add_macro_definition(
             "shader_type",
             Some(
@@ -148,7 +178,7 @@ impl ShaderCompiler for Shaderc {
         let binary_result = self
             .compiler
             .compile_into_spirv(
-                options.source,
+                &source,
                 match options.ty {
                     ShaderType::Vertex => shaderc::ShaderKind::Vertex,
                     ShaderType::Fragment => shaderc::ShaderKind::Fragment,
@@ -172,7 +202,7 @@ pub struct PipelineCompilerInfo {
 impl Default for PipelineCompilerInfo {
     fn default() -> Self {
         Self {
-            compiler: Box::new(Shaderc::new()),
+            compiler: Box::new(ByteToSpirvCompiler),
             include_dir: env::current_dir().unwrap(),
             debug_name: "PipelineCompiler".to_string(),
         }
@@ -194,11 +224,9 @@ impl PipelineCompiler {
     pub fn create_graphics_pipeline<'a>(&'a self, info: GraphicsPipelineInfo) -> Result<Pipeline> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
-        let DeviceInner {
-            logical_device,
-            descriptor_set_layout,
-            ..
-        } = &**device;
+        let DeviceInner { logical_device, .. } = &**device;
+        #[cfg(all(feature = "bindless"))]
+        let DeviceInner { bindless, .. } = &**device;
 
         let shader_data = info
             .shaders
@@ -357,7 +385,97 @@ impl PipelineCompiler {
             }
         };
 
-        let set_layouts = [*descriptor_set_layout];
+        let descriptor_pool_sizes = match info.binding.clone() {
+            BindingState::Binding(bindings) => {
+                let mut s = vec![];
+                for binding in bindings {
+                    s.push(match &binding {
+                        Binding::Buffer => vk::DescriptorPoolSize {
+                            ty: vk::DescriptorType::STORAGE_BUFFER,
+                            descriptor_count: MAX_FRAMES_IN_FLIGHT as _,
+                        },
+                        Binding::Image => vk::DescriptorPoolSize {
+                            ty: vk::DescriptorType::STORAGE_IMAGE,
+                            descriptor_count: MAX_FRAMES_IN_FLIGHT as _,
+                        },
+                    });
+                }
+                s
+            }
+            _ => todo!(),
+        };
+
+        let descriptor_pool_create_info = {
+            #[cfg(all(feature = "bindless"))]
+            let flags = vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND;
+            #[cfg(not(feature = "bindless"))]
+            let flags = vk::DescriptorPoolCreateFlags::empty();
+
+            let max_sets = MAX_FRAMES_IN_FLIGHT as _;
+
+            let pool_size_count = descriptor_pool_sizes.len() as u32;
+
+            let p_pool_sizes = descriptor_pool_sizes.as_ptr();
+
+            vk::DescriptorPoolCreateInfo {
+                flags,
+                max_sets,
+                pool_size_count,
+                p_pool_sizes,
+                ..Default::default()
+            }
+        };
+
+        let descriptor_pool =
+            unsafe { logical_device.create_descriptor_pool(&descriptor_pool_create_info, None) }
+                .map_err(|_| Error::CreateDescriptorPool)?;
+
+        let descriptor_set_layout = match info.binding.clone() {
+            BindingState::Binding(bindings) => {
+                let bindings = bindings
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, binding)| vk::DescriptorSetLayoutBinding {
+                        binding: i as u32,
+                        descriptor_type: match binding {
+                            Binding::Buffer => vk::DescriptorType::STORAGE_BUFFER,
+                            Binding::Image => vk::DescriptorType::STORAGE_IMAGE,
+                        },
+                        descriptor_count: 1,
+                        stage_flags: ShaderStageFlags::ALL,
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>();
+
+                let create_info = vk::DescriptorSetLayoutCreateInfo {
+                    binding_count: bindings.len() as _,
+                    p_bindings: bindings.as_ptr(),
+                    ..Default::default()
+                };
+
+                unsafe { logical_device.create_descriptor_set_layout(&create_info, None) }
+                    .map_err(|_| Error::CreateDescriptorSetLayout)?
+            }
+            #[cfg(all(feature = "bindless"))]
+            BindingState::Bindless => bindless.descriptor_set_layout.clone(),
+        };
+        let set_layouts = iter::repeat_with(|| descriptor_set_layout.clone())
+            .take(MAX_FRAMES_IN_FLIGHT)
+            .collect::<Vec<_>>();
+
+        let descriptor_sets = {
+            let allocate_info = vk::DescriptorSetAllocateInfo {
+                descriptor_pool,
+                descriptor_set_count: set_layouts.len() as _,
+                p_set_layouts: set_layouts.as_ptr(),
+
+                ..Default::default()
+            };
+            unsafe { logical_device.allocate_descriptor_sets(&allocate_info) }.map_err(|e| {
+                dbg!(e);
+                Error::Creation
+            })?
+        };
 
         let push_constant = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
@@ -404,7 +522,13 @@ impl PipelineCompiler {
         };
 
         let graphics_pipeline_create_info = {
-            let p_next = &mut pipeline_rendering_create_info as *mut _ as *mut _;
+            let p_next = match &info.binding {
+                BindingState::Binding(_) => ptr::null_mut(),
+                #[cfg(all(feature = "bindless"))]
+                BindingState::Bindless => {
+                    &mut pipeline_rendering_create_info as *mut _ as *mut _;
+                }
+            };
 
             let stage_count = stages.len() as u32;
 
@@ -424,7 +548,11 @@ impl PipelineCompiler {
 
             let p_dynamic_state = &dynamic_state;
 
-            let render_pass = vk::RenderPass::null();
+            let render_pass = info
+                .render_pass
+                .clone()
+                .map(|x| x.render_pass)
+                .unwrap_or(vk::RenderPass::null());
 
             vk::GraphicsPipelineCreateInfo {
                 p_next,
@@ -454,7 +582,13 @@ impl PipelineCompiler {
 
         let spec = Spec::Graphics(info);
 
-        let modify = Mutex::new(PipelineModify { pipeline, layout });
+        let modify = Mutex::new(PipelineModify {
+            pipeline,
+            layout,
+            descriptor_set_layout,
+            descriptor_sets,
+            descriptor_pool,
+        });
 
         Ok(Pipeline {
             inner: Arc::new(PipelineInner {
@@ -469,11 +603,9 @@ impl PipelineCompiler {
     pub fn create_compute_pipeline<'a>(&'a self, info: ComputePipelineInfo) -> Result<Pipeline> {
         let PipelineCompilerInner { device, .. } = &*self.inner;
 
-        let DeviceInner {
-            logical_device,
-            descriptor_set_layout,
-            ..
-        } = &**device;
+        let DeviceInner { logical_device, .. } = &**device;
+        #[cfg(all(feature = "bindless"))]
+        let DeviceInner { bindless, .. } = &**device;
 
         let spec = Spec::Compute(info.clone());
 
@@ -528,8 +660,85 @@ impl PipelineCompiler {
                 ..Default::default()
             }
         };
+        let descriptor_set_layout = match info.binding.clone() {
+            BindingState::Binding(bindings) => {
+                let bindings = bindings
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, binding)| vk::DescriptorSetLayoutBinding {
+                        binding: i as u32,
+                        descriptor_type: match binding {
+                            Binding::Buffer => vk::DescriptorType::STORAGE_BUFFER_DYNAMIC,
+                            Binding::Image => vk::DescriptorType::STORAGE_IMAGE,
+                        },
+                        descriptor_count: MAX_FRAMES_IN_FLIGHT as _,
+                        stage_flags: ShaderStageFlags::ALL,
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>();
 
-        let set_layouts = [*descriptor_set_layout];
+                let create_info = vk::DescriptorSetLayoutCreateInfo {
+                    binding_count: bindings.len() as _,
+                    p_bindings: bindings.as_ptr(),
+                    ..Default::default()
+                };
+
+                unsafe { logical_device.create_descriptor_set_layout(&create_info, None) }
+                    .map_err(|_| Error::CreateDescriptorSetLayout)?
+            }
+            #[cfg(all(feature = "bindless"))]
+            BindingState::Bindless => bindless.descriptor_set_layout.clone(),
+        };
+        let set_layouts = iter::repeat_with(|| descriptor_set_layout.clone())
+            .take(MAX_FRAMES_IN_FLIGHT)
+            .collect::<Vec<_>>();
+
+        let descriptor_pool_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 200,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_IMAGE,
+                descriptor_count: 400,
+            },
+        ];
+
+        let descriptor_pool_create_info = {
+            #[cfg(all(feature = "bindless"))]
+            let flags = vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND;
+            #[cfg(not(feature = "bindless"))]
+            let flags = vk::DescriptorPoolCreateFlags::empty();
+
+            let max_sets = 200;
+
+            let pool_size_count = descriptor_pool_sizes.len() as u32;
+
+            let p_pool_sizes = descriptor_pool_sizes.as_ptr();
+
+            vk::DescriptorPoolCreateInfo {
+                flags,
+                max_sets,
+                pool_size_count,
+                p_pool_sizes,
+                ..Default::default()
+            }
+        };
+
+        let descriptor_pool =
+            unsafe { logical_device.create_descriptor_pool(&descriptor_pool_create_info, None) }
+                .map_err(|_| Error::CreateDescriptorPool)?;
+
+        let descriptor_sets = {
+            let allocate_info = vk::DescriptorSetAllocateInfo {
+                descriptor_pool,
+                descriptor_set_count: MAX_FRAMES_IN_FLIGHT as u32,
+                p_set_layouts: set_layouts.as_ptr(),
+                ..Default::default()
+            };
+            unsafe { logical_device.allocate_descriptor_sets(&allocate_info) }
+                .map_err(|_| Error::Creation)?
+        };
 
         let push_constant = vk::PushConstantRange {
             stage_flags: vk::ShaderStageFlags::COMPUTE,
@@ -575,7 +784,13 @@ impl PipelineCompiler {
         }
         .map_err(|_| Error::Creation)?[0];
 
-        let modify = Mutex::new(PipelineModify { pipeline, layout });
+        let modify = Mutex::new(PipelineModify {
+            pipeline,
+            layout,
+            descriptor_set_layout,
+            descriptor_sets,
+            descriptor_pool,
+        });
 
         Ok(Pipeline {
             inner: Arc::new(PipelineInner {
@@ -604,7 +819,7 @@ impl PipelineCompiler {
 
         let new_pipeline_modify = new_pipeline.inner.modify.lock().unwrap();
 
-        *pipeline_modify = *new_pipeline_modify;
+        *pipeline_modify = new_pipeline_modify.clone();
 
         Ok(())
     }
@@ -626,7 +841,7 @@ impl PipelineCompiler {
 
         let new_pipeline_modify = new_pipeline.inner.modify.lock().unwrap();
 
-        *pipeline_modify = *new_pipeline_modify;
+        *pipeline_modify = new_pipeline_modify.clone();
 
         Ok(())
     }
@@ -1018,6 +1233,19 @@ impl From<OptionalDepthStencil> for vk::PipelineDepthStencilStateCreateInfo {
 }
 
 #[derive(Clone)]
+pub enum Binding {
+    Buffer,
+    Image,
+}
+
+#[derive(Clone)]
+pub enum BindingState {
+    #[cfg(all(feature = "bindless"))]
+    Bindless,
+    Binding(Vec<Binding>),
+}
+
+#[derive(Clone)]
 pub struct GraphicsPipelineInfo {
     pub shaders: Vec<Shader>,
     pub color: Vec<Color>,
@@ -1025,6 +1253,8 @@ pub struct GraphicsPipelineInfo {
     pub stencil: Option<Stencil>,
     pub raster: Raster,
     pub push_constant_size: usize,
+    pub render_pass: Option<RenderPass>,
+    pub binding: BindingState,
     pub debug_name: String,
 }
 
@@ -1037,6 +1267,8 @@ impl Default for GraphicsPipelineInfo {
             stencil: None,
             raster: Default::default(),
             push_constant_size: 128,
+            render_pass: None,
+            binding: BindingState::Binding(vec![]),
             debug_name: String::from("Pipeline"),
         }
     }
@@ -1046,6 +1278,7 @@ impl Default for GraphicsPipelineInfo {
 pub struct ComputePipelineInfo {
     pub shader: Shader,
     pub push_constant_size: usize,
+    pub binding: BindingState,
     pub debug_name: String,
 }
 
@@ -1057,6 +1290,7 @@ impl Default for ComputePipelineInfo {
                 ..Default::default()
             },
             push_constant_size: 128,
+            binding: BindingState::Binding(vec![]),
             debug_name: String::from("Pipeline"),
         }
     }
@@ -1173,8 +1407,11 @@ pub struct PipelineInner {
     pub(crate) spec: Spec,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct PipelineModify {
     pub(crate) pipeline: vk::Pipeline,
     pub(crate) layout: vk::PipelineLayout,
+    pub(crate) descriptor_sets: Vec<vk::DescriptorSet>,
+    pub(crate) descriptor_set_layout: vk::DescriptorSetLayout,
+    pub(crate) descriptor_pool: vk::DescriptorPool,
 }

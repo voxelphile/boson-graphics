@@ -243,11 +243,13 @@ fn main() {
                     from: 0,
                     //Index of the buffer in the resource vector
                     to: 1,
-                    //Source (from parameter) buffer offset.
-                    src: 0,
-                    //Destination (to parameter) buffer offset.
-                    dst: 0,
-                    size: std::mem::size_of::<f32>(),
+                    regions: vec![Region {
+                        //Source (from parameter) buffer offset.
+                        src: 0,
+                        //Destination (to parameter) buffer offset.
+                        dst: 0,
+                        size: std::mem::size_of::<f32>(),
+                    }]
                 })
             },
         });

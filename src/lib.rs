@@ -6,6 +6,7 @@ pub mod format;
 pub mod image;
 pub mod memory;
 pub mod pipeline;
+pub mod renderpass;
 pub mod semaphore;
 pub mod swapchain;
 pub mod task;
@@ -20,7 +21,8 @@ pub mod prelude {
     pub use crate::commands::{
         Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferImageCopy, BufferRead,
         BufferWrite, Clear, Commands, Draw, DrawIndexed, DrawIndexedIndirectCommand, DrawIndirect,
-        DrawIndirectCommand, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Render, RenderArea,
+        DrawIndirectCommand, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Region, Render,
+        RenderArea, WriteBinding,
     };
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};
@@ -37,6 +39,7 @@ pub mod prelude {
         PipelineCompilerInfo, PipelineStage, PolygonMode, Raster, Shader, ShaderCompiler,
         ShaderType, Stencil, StencilOp, StencilState,
     };
+    pub use crate::renderpass::*;
     pub use crate::semaphore::{
         BinarySemaphore, BinarySemaphoreInfo, TimelineSemaphore, TimelineSemaphoreInfo,
     };

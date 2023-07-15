@@ -6,6 +6,7 @@ use std::borrow;
 use std::ffi;
 use std::mem;
 use std::os::raw;
+use std::ptr;
 use std::sync::{Arc, Mutex};
 
 use ash::extensions::{ext, khr};
@@ -23,7 +24,7 @@ pub(crate) const SPECIAL_IMAGE_BINDING: u32 = 2;
 pub(crate) const SPECIAL_BUFFER_BINDING: u32 = 3;
 pub(crate) const DEVICE_ADDRESS_BUFFER_BINDING: u32 = 4;
 
-pub(crate) const DESCRIPTOR_COUNT: u32 = 2_000;
+pub(crate) const DESCRIPTOR_COUNT: u32 = 200;
 
 unsafe extern "system" fn debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -138,10 +139,16 @@ impl Context {
             });
         }
 
-        let mut extensions = vec![ext::DebugUtils::name(), khr::Surface::name()];
+        let mut extensions = vec![khr::Surface::name()];
 
         #[cfg(target_os = "windows")]
         extensions.push(khr::Win32Surface::name());
+
+        #[cfg(not(target_os = "android"))]
+        extensions.push(ext::DebugUtils::name());
+
+        #[cfg(target_os = "android")]
+        extensions.push(khr::AndroidSurface::name());
 
         let p_application_info = &application_info;
 
@@ -208,6 +215,8 @@ impl Context {
             }),
         })
     }
+
+    ///Creates the device, a handle to the system GPU which allows you to interact and manage the graphics pipeline.
     pub fn create_device(&self, info: DeviceInfo) -> Result<Device> {
         let ContextInner {
             entry, instance, ..
@@ -285,18 +294,8 @@ impl Context {
 
         let extensions = [khr::Swapchain::name()];
 
-        let mut maintenance4_features = {
-            vk::PhysicalDeviceMaintenance4Features {
-                maintenance4: true as _,
-                ..Default::default()
-            }
-        };
-
         let mut robustness2_features = {
-            let p_next = &mut maintenance4_features as *mut _ as *mut _;
-
             vk::PhysicalDeviceRobustness2FeaturesEXT {
-                p_next,
                 null_descriptor: true as _,
                 ..Default::default()
             }
@@ -306,7 +305,6 @@ impl Context {
             let p_next = &mut robustness2_features as *mut _ as *mut _;
 
             vk::PhysicalDeviceSynchronization2Features {
-                p_next,
                 synchronization2: true as _,
                 ..Default::default()
             }
@@ -358,14 +356,13 @@ impl Context {
         };
 
         let mut features = {
+            #[cfg(all(feature = "bindless"))]
             let p_next = &mut dynamic_rendering_features as *mut _ as *mut _;
 
             vk::PhysicalDeviceFeatures2 {
-                p_next,
+                p_next: &mut synchronization2_features as *mut _ as *mut _,
                 features: vk::PhysicalDeviceFeatures {
-                    fragment_stores_and_atomics: true as _,
-                    shader_int16: true as _,
-                    shader_int64: true as _,
+                    multi_draw_indirect: true as _,
                     ..info.features.into()
                 },
                 ..Default::default()
@@ -392,8 +389,19 @@ impl Context {
         let enabled_extension_names = extensions.iter().map(|s| s.as_ptr()).collect::<Vec<_>>();
         let enabled_extension_count = enabled_extension_names.len() as u32;
 
+        let mut maintenance4_features = {
+            vk::PhysicalDeviceMaintenance4Features {
+                p_next: &mut features as *mut _ as *mut _,
+                maintenance4: true as _,
+                ..Default::default()
+            }
+        };
+
         let device_create_info = {
+            #[cfg(all(feature = "bindless"))]
             let p_next = &mut features as *mut _ as *mut _;
+            #[cfg(not(feature = "bindless"))]
+            let p_next = &mut maintenance4_features as *mut _ as *mut _;
 
             let queue_create_info_count = device_queue_create_infos.len() as _;
             let p_queue_create_infos = device_queue_create_infos.as_ptr();
@@ -420,238 +428,210 @@ impl Context {
         }
         .map_err(|_| Error::CreateLogicalDevice)?;
 
-        let descriptor_pool_sizes = [
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::SAMPLER,
-                descriptor_count: DESCRIPTOR_COUNT,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::SAMPLED_IMAGE,
-                descriptor_count: DESCRIPTOR_COUNT,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::STORAGE_IMAGE,
-                descriptor_count: DESCRIPTOR_COUNT,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: DESCRIPTOR_COUNT,
-            },
-            vk::DescriptorPoolSize {
-                ty: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-            },
-        ];
+        #[cfg(all(feature = "bindless"))]
+        let bindless = {
+            let descriptor_set_layout_bindings = [
+                vk::DescriptorSetLayoutBinding {
+                    binding: 0,
+                    descriptor_type: vk::DescriptorType::SAMPLER,
+                    descriptor_count: DESCRIPTOR_COUNT,
+                    stage_flags: vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
+                    descriptor_count: DESCRIPTOR_COUNT,
+                    stage_flags: vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: SPECIAL_IMAGE_BINDING,
+                    descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
+                    descriptor_count: DESCRIPTOR_COUNT,
+                    stage_flags: vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: SPECIAL_BUFFER_BINDING,
+                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: DESCRIPTOR_COUNT,
+                    stage_flags: vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: DEVICE_ADDRESS_BUFFER_BINDING,
+                    descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::VERTEX
+                        | vk::ShaderStageFlags::FRAGMENT
+                        | vk::ShaderStageFlags::COMPUTE,
+                    ..Default::default()
+                },
+            ];
 
-        let descriptor_pool_create_info = {
-            let flags = vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND;
+            let binding_flags = [vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING
+                | vk::DescriptorBindingFlags::PARTIALLY_BOUND
+                | vk::DescriptorBindingFlags::UPDATE_AFTER_BIND; 5];
 
-            let max_sets = 1;
+            let descriptor_set_layout_binding_flags_create_info = {
+                let binding_count = binding_flags.len() as u32;
 
-            let pool_size_count = descriptor_pool_sizes.len() as u32;
+                let p_binding_flags = binding_flags.as_ptr();
 
-            let p_pool_sizes = descriptor_pool_sizes.as_ptr();
-
-            vk::DescriptorPoolCreateInfo {
-                flags,
-                max_sets,
-                pool_size_count,
-                p_pool_sizes,
-                ..Default::default()
-            }
-        };
-
-        let descriptor_pool =
-            unsafe { logical_device.create_descriptor_pool(&descriptor_pool_create_info, None) }
-                .map_err(|_| Error::CreateDescriptorPool)?;
-
-        let descriptor_set_layout_bindings = [
-            vk::DescriptorSetLayoutBinding {
-                binding: 0,
-                descriptor_type: vk::DescriptorType::SAMPLER,
-                descriptor_count: DESCRIPTOR_COUNT,
-                stage_flags: vk::ShaderStageFlags::VERTEX
-                    | vk::ShaderStageFlags::FRAGMENT
-                    | vk::ShaderStageFlags::COMPUTE,
-                ..Default::default()
-            },
-            vk::DescriptorSetLayoutBinding {
-                binding: 1,
-                descriptor_type: vk::DescriptorType::SAMPLED_IMAGE,
-                descriptor_count: DESCRIPTOR_COUNT,
-                stage_flags: vk::ShaderStageFlags::VERTEX
-                    | vk::ShaderStageFlags::FRAGMENT
-                    | vk::ShaderStageFlags::COMPUTE,
-                ..Default::default()
-            },
-            vk::DescriptorSetLayoutBinding {
-                binding: SPECIAL_IMAGE_BINDING,
-                descriptor_type: vk::DescriptorType::STORAGE_IMAGE,
-                descriptor_count: DESCRIPTOR_COUNT,
-                stage_flags: vk::ShaderStageFlags::VERTEX
-                    | vk::ShaderStageFlags::FRAGMENT
-                    | vk::ShaderStageFlags::COMPUTE,
-                ..Default::default()
-            },
-            vk::DescriptorSetLayoutBinding {
-                binding: SPECIAL_BUFFER_BINDING,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: DESCRIPTOR_COUNT,
-                stage_flags: vk::ShaderStageFlags::VERTEX
-                    | vk::ShaderStageFlags::FRAGMENT
-                    | vk::ShaderStageFlags::COMPUTE,
-                ..Default::default()
-            },
-            vk::DescriptorSetLayoutBinding {
-                binding: DEVICE_ADDRESS_BUFFER_BINDING,
-                descriptor_type: vk::DescriptorType::STORAGE_BUFFER,
-                descriptor_count: 1,
-                stage_flags: vk::ShaderStageFlags::VERTEX
-                    | vk::ShaderStageFlags::FRAGMENT
-                    | vk::ShaderStageFlags::COMPUTE,
-                ..Default::default()
-            },
-        ];
-
-        let binding_flags = [vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING
-            | vk::DescriptorBindingFlags::PARTIALLY_BOUND
-            | vk::DescriptorBindingFlags::UPDATE_AFTER_BIND; 5];
-
-        let descriptor_set_layout_binding_flags_create_info = {
-            let binding_count = binding_flags.len() as u32;
-
-            let p_binding_flags = binding_flags.as_ptr();
-
-            vk::DescriptorSetLayoutBindingFlagsCreateInfo {
-                binding_count,
-                p_binding_flags,
-                ..Default::default()
-            }
-        };
-
-        let descriptor_set_layout_create_info = {
-            let p_next = &descriptor_set_layout_binding_flags_create_info as *const _ as *const _;
-
-            let flags = vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL;
-
-            let binding_count = descriptor_set_layout_bindings.len() as u32;
-
-            let p_bindings = descriptor_set_layout_bindings.as_ptr();
-
-            vk::DescriptorSetLayoutCreateInfo {
-                p_next,
-                flags,
-                binding_count,
-                p_bindings,
-                ..Default::default()
-            }
-        };
-
-        let descriptor_set_layout = unsafe {
-            logical_device.create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
-        }
-        .map_err(|_| Error::CreateDescriptorSetLayout)?;
-
-        let set_layouts = [descriptor_set_layout];
-
-        let descriptor_set_allocate_info = {
-            let descriptor_set_count = 1;
-
-            let p_set_layouts = set_layouts.as_ptr();
-
-            vk::DescriptorSetAllocateInfo {
-                descriptor_pool,
-                descriptor_set_count,
-                p_set_layouts,
-                ..Default::default()
-            }
-        };
-
-        let descriptor_set =
-            unsafe { logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info) }
-                .map_err(|_| Error::AllocateDescriptorSets)?[0];
-
-        let allocation_size = (DESCRIPTOR_COUNT * mem::size_of::<u64>() as u32) as u64;
-
-        let staging_address_buffer = {
-            let buffer_create_info = vk::BufferCreateInfo {
-                size: allocation_size as _,
-                usage: vk::BufferUsageFlags::TRANSFER_SRC,
-                sharing_mode: vk::SharingMode::EXCLUSIVE,
-                ..Default::default()
+                vk::DescriptorSetLayoutBindingFlagsCreateInfo {
+                    binding_count,
+                    p_binding_flags,
+                    ..Default::default()
+                }
             };
 
-            unsafe { logical_device.create_buffer(&buffer_create_info, None) }
-                .map_err(|_| Error::CreateBuffer)?
-        };
+            let descriptor_set_layout_create_info = {
+                let p_next =
+                    &descriptor_set_layout_binding_flags_create_info as *const _ as *const _;
 
-        let staging_address_memory = {
-            let memory_requirements =
-                unsafe { logical_device.get_buffer_memory_requirements(staging_address_buffer) };
+                let flags = vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL;
 
-            let memory_properties =
-                unsafe { instance.get_physical_device_memory_properties(physical_device) };
+                let binding_count = descriptor_set_layout_bindings.len() as u32;
 
-            let memory_type_index = memory::type_index(
-                &memory_requirements,
-                &memory_properties,
-                Memory::HOST_ACCESS.into(),
-            )?;
+                let p_bindings = descriptor_set_layout_bindings.as_ptr();
 
-            let memory_allocate_info = vk::MemoryAllocateInfo {
-                allocation_size,
-                memory_type_index,
-                ..Default::default()
+                vk::DescriptorSetLayoutCreateInfo {
+                    p_next,
+                    flags,
+                    binding_count,
+                    p_bindings,
+                    ..Default::default()
+                }
             };
 
-            unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
-                .map_err(|_| Error::AllocateMemory)?
-        };
+            let descriptor_set_layout = unsafe {
+                logical_device
+                    .create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
+            }
+            .map_err(|_| Error::CreateDescriptorSetLayout)?;
 
-        unsafe {
-            logical_device.bind_buffer_memory(staging_address_buffer, staging_address_memory, 0)
-        }
-        .map_err(|_| Error::BindBufferMemory)?;
+            let set_layouts = [descriptor_set_layout];
 
-        let general_address_buffer = {
-            let buffer_create_info = vk::BufferCreateInfo {
-                size: allocation_size as _,
-                usage: vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::STORAGE_BUFFER,
-                sharing_mode: vk::SharingMode::EXCLUSIVE,
-                ..Default::default()
+            let descriptor_set_allocate_info = {
+                let descriptor_set_count = 1;
+
+                let p_set_layouts = set_layouts.as_ptr();
+
+                vk::DescriptorSetAllocateInfo {
+                    descriptor_pool,
+                    descriptor_set_count,
+                    p_set_layouts,
+                    ..Default::default()
+                }
             };
 
-            unsafe { logical_device.create_buffer(&buffer_create_info, None) }
-                .map_err(|_| Error::CreateBuffer)?
-        };
+            let descriptor_set =
+                unsafe { logical_device.allocate_descriptor_sets(&descriptor_set_allocate_info) }
+                    .map_err(|_| Error::AllocateDescriptorSets)?[0];
 
-        let general_address_memory = {
-            let memory_requirements =
-                unsafe { logical_device.get_buffer_memory_requirements(general_address_buffer) };
+            let allocation_size = (DESCRIPTOR_COUNT * mem::size_of::<u64>() as u32) as u64;
 
-            let memory_properties =
-                unsafe { instance.get_physical_device_memory_properties(physical_device) };
+            let staging_address_buffer = {
+                let buffer_create_info = vk::BufferCreateInfo {
+                    size: allocation_size as _,
+                    usage: vk::BufferUsageFlags::TRANSFER_SRC,
+                    sharing_mode: vk::SharingMode::EXCLUSIVE,
+                    ..Default::default()
+                };
 
-            let memory_type_index = memory::type_index(
-                &memory_requirements,
-                &memory_properties,
-                Memory::empty().into(),
-            )?;
-
-            let memory_allocate_info = vk::MemoryAllocateInfo {
-                allocation_size,
-                memory_type_index,
-                ..Default::default()
+                unsafe { logical_device.create_buffer(&buffer_create_info, None) }
+                    .map_err(|_| Error::CreateBuffer)?
             };
 
-            unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
-                .map_err(|_| Error::AllocateMemory)?
-        };
+            let staging_address_memory = {
+                let memory_requirements = unsafe {
+                    logical_device.get_buffer_memory_requirements(staging_address_buffer)
+                };
 
-        unsafe {
-            logical_device.bind_buffer_memory(general_address_buffer, general_address_memory, 0)
-        }
-        .map_err(|_| Error::BindBufferMemory)?;
+                let memory_properties =
+                    unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
+                let memory_type_index = memory::type_index(
+                    &memory_requirements,
+                    &memory_properties,
+                    Memory::HOST_ACCESS.into(),
+                )?;
+
+                let memory_allocate_info = vk::MemoryAllocateInfo {
+                    allocation_size,
+                    memory_type_index,
+                    ..Default::default()
+                };
+
+                unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
+                    .map_err(|_| Error::AllocateMemory)?
+            };
+
+            unsafe {
+                logical_device.bind_buffer_memory(staging_address_buffer, staging_address_memory, 0)
+            }
+            .map_err(|_| Error::BindBufferMemory)?;
+
+            let general_address_buffer = {
+                let buffer_create_info = vk::BufferCreateInfo {
+                    size: allocation_size as _,
+                    usage: vk::BufferUsageFlags::TRANSFER_DST
+                        | vk::BufferUsageFlags::STORAGE_BUFFER,
+                    sharing_mode: vk::SharingMode::EXCLUSIVE,
+                    ..Default::default()
+                };
+
+                unsafe { logical_device.create_buffer(&buffer_create_info, None) }
+                    .map_err(|_| Error::CreateBuffer)?
+            };
+
+            let general_address_memory = {
+                let memory_requirements = unsafe {
+                    logical_device.get_buffer_memory_requirements(general_address_buffer)
+                };
+
+                let memory_properties =
+                    unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
+                let memory_type_index = memory::type_index(
+                    &memory_requirements,
+                    &memory_properties,
+                    Memory::empty().into(),
+                )?;
+
+                let memory_allocate_info = vk::MemoryAllocateInfo {
+                    allocation_size,
+                    memory_type_index,
+                    ..Default::default()
+                };
+
+                unsafe { logical_device.allocate_memory(&memory_allocate_info, None) }
+                    .map_err(|_| Error::AllocateMemory)?
+            };
+
+            unsafe {
+                logical_device.bind_buffer_memory(general_address_buffer, general_address_memory, 0)
+            }
+            .map_err(|_| Error::BindBufferMemory)?;
+
+            Bindless {
+                descriptor_set,
+                descriptor_set_layout,
+                staging_address_buffer,
+                staging_address_memory,
+                general_address_buffer,
+                general_address_memory,
+            }
+        };
 
         let command_pool_create_info = vk::CommandPoolCreateInfo {
             flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
@@ -667,20 +647,15 @@ impl Context {
 
         Ok(Device {
             inner: Arc::new(DeviceInner {
+                #[cfg(all(feature = "bindless"))]
+                bindless,
                 context: self.inner.clone(),
                 surface: (surface_loader, surface_handle),
                 physical_device,
                 logical_device,
                 queue_family_indices,
-                descriptor_pool,
-                descriptor_set,
-                descriptor_set_layout,
                 resources,
                 command_pool,
-                staging_address_buffer,
-                staging_address_memory,
-                general_address_buffer,
-                general_address_memory,
             }),
         })
     }

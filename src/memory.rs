@@ -26,8 +26,9 @@ impl From<Memory> for vk::MemoryPropertyFlags {
         }
 
         if memory.contains(Memory::HOST_ACCESS) {
-            result |=
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+            result |= vk::MemoryPropertyFlags::HOST_VISIBLE
+                | vk::MemoryPropertyFlags::HOST_COHERENT
+                | vk::MemoryPropertyFlags::HOST_CACHED;
         }
 
         result
