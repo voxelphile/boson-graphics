@@ -12,6 +12,13 @@ use std::sync::{Arc, Mutex};
 use ash::extensions::{ext, khr};
 use ash::{vk, Entry, Instance};
 
+#[cfg(target_os = "android")]
+use raw_window_handle::AndroidDisplayHandle;
+#[cfg(target_os = "windows")]
+use raw_window_handle::WindowsDisplayHandle;
+#[cfg(target_os = "linux")]
+use raw_window_handle::XlibDisplayHandle;
+
 use semver::Version;
 
 use raw_window_handle::{
@@ -78,6 +85,7 @@ pub struct ContextInfo<'a> {
     pub application_version: Version,
     pub engine_name: &'a str,
     pub engine_version: Version,
+    pub display: RawDisplayHandle,
 }
 
 impl Default for ContextInfo<'_> {
@@ -88,6 +96,12 @@ impl Default for ContextInfo<'_> {
             application_version: Version::new(0, 1, 0),
             engine_name: "",
             engine_version: Version::new(0, 1, 0),
+            #[cfg(target_os = "windows")]
+            display: RawDisplayHandle::Windows(WindowsDisplayHandle::empty()),
+            #[cfg(target_os = "linux")]
+            display: RawDisplayHandle::Xlib(XlibDisplayHandle::empty()),
+            #[cfg(target_os = "android")]
+            display: RawDisplayHandle::Android(AndroidDisplayHandle::empty()),
         }
     }
 }
@@ -139,23 +153,24 @@ impl Context {
             });
         }
 
-        let mut extensions = vec![khr::Surface::name()];
-
-        #[cfg(target_os = "windows")]
-        extensions.push(khr::Win32Surface::name());
+        let mut extensions = vec![];
 
         #[cfg(not(target_os = "android"))]
         extensions.push(ext::DebugUtils::name());
 
-        #[cfg(target_os = "android")]
-        extensions.push(khr::AndroidSurface::name());
+        let surface_extension_names =
+            ash_window::enumerate_required_extensions(info.display).expect("Unsupported Surface");
 
         let p_application_info = &application_info;
 
         let enabled_layer_names = layers.iter().map(|s| s.as_ptr()).collect::<Vec<_>>();
         let enabled_layer_count = enabled_layer_names.len() as u32;
 
-        let enabled_extension_names = extensions.iter().map(|s| s.as_ptr()).collect::<Vec<_>>();
+        let enabled_extension_names = extensions
+            .iter()
+            .map(|s| s.as_ptr())
+            .chain(surface_extension_names.iter().copied())
+            .collect::<Vec<_>>();
         let enabled_extension_count = enabled_extension_names.len() as u32;
 
         let instance_create_info = {
