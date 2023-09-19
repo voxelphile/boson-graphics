@@ -10,7 +10,7 @@ use std::ptr;
 use std::slice;
 use std::sync::Mutex;
 
-use ash::vk::{self, Offset2D, Rect2D};
+use ash::vk::{self, Offset2D, Rect2D, Offset3D};
 
 use bitflags::bitflags;
 
@@ -193,6 +193,13 @@ pub struct BufferCopy {
     pub from: usize,
     pub to: usize,
     pub regions: Vec<Region>,
+}
+
+pub struct BlitImage {
+    pub from: usize,
+    pub to: usize,
+    pub src: (usize, usize, usize),
+    pub dst: (usize, usize, usize),
 }
 
 pub struct ImageCopy {
@@ -842,6 +849,95 @@ impl Commands<'_> {
                 &regions,
             );
         }
+
+        Ok(())
+    }
+
+    ///Copy from an image to a buffer.
+    /// TODO make this more flexible and closer to vk api. I am being lazy rn.
+    pub fn blit_image(&mut self, blit: BlitImage) -> Result<()> {
+        let Commands {
+            device,
+            qualifiers,
+            command_buffer,
+            ..
+        } = self;
+
+        let DeviceInner {
+            logical_device,
+            resources,
+            ..
+        } = &*device;
+
+        let BlitImage {
+            from,
+            to,
+            src,
+            dst
+        } = blit;
+
+        let resources = resources.lock().unwrap();
+
+        let Qualifier::Image(from_image_handle, from_image_access, from_image_aspect) = qualifiers.get(from).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let from_image = resources
+            .images
+            .get(*from_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_image();
+
+        let from_image_format = resources
+            .images
+            .get(*from_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_format();
+
+        let Qualifier::Image(to_image_handle, to_image_access, image_aspect) = qualifiers.get(to).ok_or(Error::InvalidResource)? else {
+            Err(Error::InvalidResource)?
+        };
+
+        let to_image = resources
+            .images
+            .get(*to_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_image();
+
+        let to_image_format = resources
+            .images
+            .get(*to_image_handle)
+            .ok_or(Error::ResourceNotFound)?
+            .get_format();
+
+        let regions = [vk::ImageBlit {
+            src_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: (*from_image_aspect).into(),
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            dst_subresource: vk::ImageSubresourceLayers {
+                aspect_mask: (*from_image_aspect).into(),
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            },
+            src_offsets: [Offset3D::default(), Offset3D { x: src.0 as _, y: src.1 as _, z: src.2 as _}],
+            dst_offsets: [Offset3D::default(), Offset3D { x: dst.0 as _, y: dst.1 as _, z: dst.2 as _}],
+        }];
+
+        unsafe {
+            logical_device.cmd_blit_image(
+                **command_buffer,
+                from_image,
+                ImageLayout::from(*from_image_access).into(),
+                to_image,
+                ImageLayout::from(*to_image_access).into(),
+                &regions,
+                vk::Filter::NEAREST   
+            )
+        };
 
         Ok(())
     }

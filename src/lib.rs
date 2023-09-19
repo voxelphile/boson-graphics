@@ -22,7 +22,7 @@ pub mod prelude {
         Access, Attachment, Barrier, BindIndexBuffer, BufferCopy, BufferImageCopy, BufferRead,
         BufferWrite, Clear, Commands, Draw, DrawIndexed, DrawIndexedIndirectCommand, DrawIndirect,
         DrawIndirectCommand, ImageCopy, LoadOp, PipelineBarrier, PushConstant, Region, Render,
-        RenderArea, WriteBinding,
+        RenderArea, WriteBinding, BlitImage
     };
     pub(crate) use crate::context::DESCRIPTOR_COUNT;
     pub use crate::context::{Context, ContextInfo};

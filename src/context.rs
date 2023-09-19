@@ -397,11 +397,17 @@ impl Context {
             }
         };
 
+        let mut vulkan11_features = vk::PhysicalDeviceVulkan11Features {
+            p_next: &mut maintenance4_features as *mut _ as *mut _,
+            shader_draw_parameters: true as _,
+            ..Default::default()
+        };
+
         let device_create_info = {
             #[cfg(all(feature = "bindless"))]
             let p_next = &mut features as *mut _ as *mut _;
             #[cfg(not(feature = "bindless"))]
-            let p_next = &mut maintenance4_features as *mut _ as *mut _;
+            let p_next = &mut vulkan11_features as *mut _ as *mut _;
 
             let queue_create_info_count = device_queue_create_infos.len() as _;
             let p_queue_create_infos = device_queue_create_infos.as_ptr();

@@ -98,8 +98,8 @@ pub struct ShaderCompilationOptions<'a> {
 
 #[derive(Clone)]
 pub struct Define {
-    name: String,
-    value: String,
+    pub name: String,
+    pub value: String,
 }
 
 pub trait ShaderCompiler: 'static + Send + Sync {
@@ -668,7 +668,7 @@ impl PipelineCompiler {
                     .map(|(i, binding)| vk::DescriptorSetLayoutBinding {
                         binding: i as u32,
                         descriptor_type: match binding {
-                            Binding::Buffer => vk::DescriptorType::STORAGE_BUFFER_DYNAMIC,
+                            Binding::Buffer => vk::DescriptorType::STORAGE_BUFFER,
                             Binding::Image => vk::DescriptorType::STORAGE_IMAGE,
                         },
                         descriptor_count: MAX_FRAMES_IN_FLIGHT as _,
@@ -1289,7 +1289,7 @@ impl Default for ComputePipelineInfo {
                 ty: ShaderType::Compute,
                 ..Default::default()
             },
-            push_constant_size: 128,
+            push_constant_size: 0,
             binding: BindingState::Binding(vec![]),
             debug_name: String::from("Pipeline"),
         }

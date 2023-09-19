@@ -1038,6 +1038,7 @@ impl Device {
             size,
             usage,
             memory: properties,
+            device_address,
             debug_name,
         } = info;
 
@@ -1077,7 +1078,11 @@ impl Device {
         };
 
         let memory_allocate_info = {
-            let p_next = &mut memory_allocate_flags_info as *mut _ as *mut _;
+            let p_next = if device_address {
+                &mut memory_allocate_flags_info as *mut _ as *mut _
+            } else {
+                ptr::null_mut()
+            };
             vk::MemoryAllocateInfo {
                 p_next,
                 allocation_size,

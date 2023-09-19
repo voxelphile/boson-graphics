@@ -71,6 +71,7 @@ pub struct BufferInfo<'a> {
     pub size: usize,
     pub memory: Memory,
     pub usage: BufferUsage,
+    pub device_address: bool,
     pub debug_name: &'a str,
 }
 
@@ -80,6 +81,7 @@ impl Default for BufferInfo<'_> {
             size: 0,
             memory: Memory::DEVICE_LOCAL,
             usage: BufferUsage::all(),
+            device_address: false,
             debug_name: "Buffer",
         }
     }
